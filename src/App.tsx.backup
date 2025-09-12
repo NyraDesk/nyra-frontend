@@ -1,0 +1,2204 @@
+import React, { useState, useRef, useEffect } from 'react';
+import type { ElectronAPI } from './types/electron';
+import { openRouter } from './services/openrouter';
+import { electronBridge } from './services/electronBridge';
+import { actionParser, ParsedAction } from './services/actionParser';
+import { ResultFormatter } from './services/resultFormatter';
+import { ReliableAutomation } from './services/reliableAutomation';
+import { NaturalConversation } from './services/naturalConversation';
+import { ErrorHandler } from './services/errorHandler';
+import SettingsOverlay from './components/SettingsOverlay';
+import SettingsComponent from './components/Settings';
+import {
+  Plus, MessageSquare, Mic, Settings, User, Moon, Sun, Send,
+  Mail, Calendar, FolderOpen, Globe, Menu, X, Clock, Eye, EyeOff,
+  Power, PowerOff, MoreHorizontal, Check
+} from 'lucide-react';
+
+interface Message {
+  id: string;
+  text: string;
+  isUser: boolean;
+  timestamp: Date;
+}
+
+interface Chat {
+  id: string;
+  name: string;
+  lastMessage: string;
+  timestamp: Date;
+  isActive: boolean;
+}
+
+interface Action {
+  id: string;
+  description: string;
+  timestamp: Date;
+  conversationId: string;
+  conversationTitle: string;
+}
+
+interface TaskMemory {
+  id: string;
+  action: string;
+  timestamp: Date;
+  status: 'completed' | 'failed';
+}
+
+interface Task {
+  id: number;
+  action: string;
+  timestamp: Date;
+  status: 'completed' | 'pending';
+}
+
+// SpeechRecognition type declaration
+interface SpeechRecognition extends EventTarget {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((this: SpeechRecognition, ev: SpeechRecognitionEvent) => any) | null;
+  onend: ((this: SpeechRecognition, ev: Event) => any) | null;
+  onerror: ((this: SpeechRecognition, ev: Event) => any) | null;
+  start(): void;
+  stop(): void;
+}
+
+interface SpeechRecognitionEvent {
+  resultIndex: number;
+  results: SpeechRecognitionResultList;
+}
+
+interface SpeechRecognitionResultList {
+  length: number;
+  [index: number]: SpeechRecognitionResult;
+}
+
+interface SpeechRecognitionResult {
+  [index: number]: SpeechRecognitionAlternative;
+  length: number;
+}
+
+interface SpeechRecognitionAlternative {
+  transcript: string;
+  confidence: number;
+}
+
+function App() {
+  const [showWelcome, setShowWelcomeScreen] = useState(() => {
+    // Check if user session exists AND if user selected "Resta collegato"
+    const savedUser = localStorage.getItem('nyra_user');
+    const stayConnectedFlag = localStorage.getItem('nyra_stay_connected');
+    
+    // Logica robusta per mostrare welcome screen
+    // Mostra welcome screen se:
+    // 1. Nessun utente salvato, OR
+    // 2. Utente esiste ma non ha selezionato "Resta collegato"
+    
+    if (!savedUser) {
+      return true;
+    }
+    
+    if (stayConnectedFlag !== 'true') {
+      // Utente esiste ma non ha selezionato "Resta collegato", pulisci sessione
+      localStorage.removeItem('nyra_user');
+      return true;
+    }
+    
+    // Utente ha sessione valida E ha selezionato "Resta collegato"
+    return false;
+  });
+  const [isLogin, setIsLogin] = useState(true);
+  const [registrationData, setRegistrationData] = useState({
+    email: '',
+    username: '',
+    password: ''
+  });
+  const [showPassword, setShowPasswordVisible] = useState(false);
+  const [stayConnected, setStayConnected] = useState(false);
+  
+  // Logica corretta per showWelcome
+  const shouldShowWelcome = showWelcome;
+  const [selectedLanguage, setSelectedLanguage] = useState('Italiano');
+  const [emailExists, setEmailExists] = useState(false);
+  const [emailCheckMessage, setEmailCheckMessage] = useState('');
+  const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+  
+  // Language state with persistence
+  const [language, setLanguage] = useState(() => {
+    const savedLanguage = localStorage.getItem('nyra_language');
+    return savedLanguage || 'Italiano';
+  });
+  
+  // Theme state with persistence and system detection
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
+    const savedTheme = localStorage.getItem('nyra_theme');
+    return (savedTheme as 'light' | 'dark' | 'system') || 'system';
+  });
+  
+  const [currentUser, setCurrentUser] = useState(() => {
+    // Check for existing session AND "Resta collegato" flag on app initialization
+    const savedUser = localStorage.getItem('nyra_user');
+    const stayConnectedFlag = localStorage.getItem('nyra_stay_connected');
+    
+    if (savedUser && stayConnectedFlag === 'true') {
+      try {
+        return JSON.parse(savedUser);
+      } catch (error) {
+        console.error('Error loading user data:', error);
+        localStorage.removeItem('nyra_user');
+        localStorage.removeItem('nyra_stay_connected');
+        return null;
+      }
+    } else if (savedUser && stayConnectedFlag !== 'true') {
+      // User exists but didn't select "Resta collegato", clear session
+      localStorage.removeItem('nyra_user');
+    }
+    return null;
+  });
+  
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const savedTheme = localStorage.getItem('nyra_theme');
+    const themePreference = (savedTheme as 'light' | 'dark' | 'system') || 'system';
+    
+    if (themePreference === 'system') {
+      return window.matchMedia('(prefers-color-scheme: dark)').matches;
+    }
+    return themePreference === 'dark';
+  });
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isOfflineMode, setIsOfflineMode] = useState(false);
+  const [showTaskMemory, setShowTaskMemory] = useState(false);
+  const [showActionHistory, setShowActionHistory] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showSettingsOverlay, setShowSettingsOverlay] = useState(false);
+  
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputMessage, setInputMessage] = useState('');
+  const [isListening, setIsListening] = useState(false);
+  const [showWelcomeMessage, setShowWelcomeMessage] = useState(true);
+  const [isFirstMessage, setIsFirstMessage] = useState(true);
+  const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
+  const [isRecognitionSupported, setIsRecognitionSupported] = useState(false);
+  const [isAppReady, setIsAppReady] = useState(false);
+  const [actions, setActions] = useState<Action[]>([]);
+  const [isNyraThinking, setIsNyraThinking] = useState(false);
+  const [ipcTestResult, setIpcTestResult] = useState<string>('');
+  const [ipcTesting, setIpcTesting] = useState(false);
+
+  // Initialize empty conversations
+  const [chats, setChats] = useState<Chat[]>([]);
+  const [conversationMessages, setConversationMessages] = useState<{[key: string]: Message[]}>({});
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [conversationCounter, setConversationCounter] = useState(1);
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+
+  // Static taskMemory array
+  const taskMemory: Task[] = [
+    {
+      id: 1,
+      action: "Aperto file documento.txt",
+      timestamp: new Date('2024-01-15T10:30:00'),
+      status: 'completed'
+    },
+    {
+      id: 2,
+      action: "Inviato email a cliente@example.com",
+      timestamp: new Date('2024-01-15T14:45:00'),
+      status: 'completed'
+    },
+    {
+      id: 3,
+      action: "Programmato meeting per domani",
+      timestamp: new Date('2024-01-15T16:20:00'),
+      status: 'pending'
+    }
+  ];
+
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const isProcessingRef = useRef(false); // Evita chiamate ricorsive
+
+  // Utility functions
+  const formatTime = (date: Date): string => {
+    return new Intl.DateTimeFormat('it-IT', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false
+    }).format(date);
+  };
+
+  const formatDate = (date: Date): string => {
+    return new Intl.DateTimeFormat('it-IT', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    }).format(date);
+  };
+    const [showWelcome, setShowWelcomeScreen] = useState(() => {
+      // Check if user session exists AND if user selected "Resta collegato"
+      const savedUser = localStorage.getItem('nyra_user');
+      const stayConnectedFlag = localStorage.getItem('nyra_stay_connected');
+      
+      // Logica robusta per mostrare welcome screen
+      // Mostra welcome screen se:
+      // 1. Nessun utente salvato, OR
+      // 2. Utente esiste ma non ha selezionato "Resta collegato"
+      
+      if (!savedUser) {
+        return true;
+      }
+      
+      if (stayConnectedFlag !== 'true') {
+        // Utente esiste ma non ha selezionato "Resta collegato", pulisci sessione
+        localStorage.removeItem('nyra_user');
+        return true;
+      }
+      
+      // Utente ha sessione valida E ha selezionato "Resta collegato"
+      return false;
+    });
+    const [isLogin, setIsLogin] = useState(true);
+    const [registrationData, setRegistrationData] = useState({
+      email: '',
+      username: '',
+      password: ''
+    });
+    const [showPassword, setShowPasswordVisible] = useState(false);
+    const [stayConnected, setStayConnected] = useState(false);
+    
+    // Logica corretta per showWelcome
+    const shouldShowWelcome = showWelcome;
+    const [selectedLanguage, setSelectedLanguage] = useState('Italiano');
+    const [emailExists, setEmailExists] = useState(false);
+    const [emailCheckMessage, setEmailCheckMessage] = useState('');
+    const [isCheckingEmail, setIsCheckingEmail] = useState(false);
+    
+    // Language state with persistence
+    const [language, setLanguage] = useState(() => {
+      const savedLanguage = localStorage.getItem('nyra_language');
+      return savedLanguage || 'Italiano';
+    });
+    
+    // Theme state with persistence and system detection
+    const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
+      const savedTheme = localStorage.getItem('nyra_theme');
+      return (savedTheme as 'light' | 'dark' | 'system') || 'system';
+    });
+    
+    const [currentUser, setCurrentUser] = useState(() => {
+      // Check for existing session AND "Resta collegato" flag on app initialization
+      const savedUser = localStorage.getItem('nyra_user');
+      const stayConnectedFlag = localStorage.getItem('nyra_stay_connected');
+      
+      if (savedUser && stayConnectedFlag === 'true') {
+        try {
+          return JSON.parse(savedUser);
+        } catch (error) {
+          console.error('Error loading user data:', error);
+          localStorage.removeItem('nyra_user');
+          localStorage.removeItem('nyra_stay_connected');
+          return null;
+        }
+      } else if (savedUser && stayConnectedFlag !== 'true') {
+        // User exists but didn't select "Resta collegato", clear session
+        localStorage.removeItem('nyra_user');
+      }
+      return null;
+    });
+    
+    const [isDarkMode, setIsDarkMode] = useState(() => {
+      const savedTheme = localStorage.getItem('nyra_theme');
+      const themePreference = (savedTheme as 'light' | 'dark' | 'system') || 'system';
+      
+      if (themePreference === 'system') {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches;
+      }
+      return themePreference === 'dark';
+    });
+    const [sidebarOpen, setSidebarOpen] = useState(true);
+    const [isOfflineMode, setIsOfflineMode] = useState(false);
+    const [showTaskMemory, setShowTaskMemory] = useState(false);
+    const [showActionHistory, setShowActionHistory] = useState(false);
+    const [showUserMenu, setShowUserMenu] = useState(false);
+    const [showSettings, setShowSettings] = useState(false);
+    const [showSettingsOverlay, setShowSettingsOverlay] = useState(false);
+    
+    const [messages, setMessages] = useState<Message[]>([]);
+    const [inputMessage, setInputMessage] = useState('');
+    const [isListening, setIsListening] = useState(false);
+    const [showWelcomeMessage, setShowWelcomeMessage] = useState(true);
+    const [isFirstMessage, setIsFirstMessage] = useState(true);
+    const [recognition, setRecognition] = useState<SpeechRecognition | null>(null);
+    const [isRecognitionSupported, setIsRecognitionSupported] = useState(false);
+    const [isAppReady, setIsAppReady] = useState(false);
+    const [actions, setActions] = useState<Action[]>([]);
+    const [isNyraThinking, setIsNyraThinking] = useState(false);
+    const [ipcTestResult, setIpcTestResult] = useState<string>('');
+    const [ipcTesting, setIpcTesting] = useState(false);
+
+    // Initialize empty conversations
+    const [chats, setChats] = useState<Chat[]>([]);
+    const [conversationMessages, setConversationMessages] = useState<{[key: string]: Message[]}>({});
+    const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+    const [conversationCounter, setConversationCounter] = useState(1);
+    const [currentChatId, setCurrentChatId] = useState<string | null>(null);
+
+    // Static taskMemory array
+    const taskMemory: Task[] = [
+      {
+        id: 1,
+        action: "Aperto file documento.txt",
+        timestamp: new Date('2024-01-15T10:30:00'),
+        status: 'completed'
+      },
+      {
+        id: 2,
+        action: "Inviato email a cliente@example.com",
+        timestamp: new Date('2024-01-15T14:45:00'),
+        status: 'completed'
+      },
+      {
+        id: 3,
+        action: "Programmato meeting per domani",
+        timestamp: new Date('2024-01-15T16:20:00'),
+        status: 'pending'
+      }
+    ];
+
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const messagesEndRef = useRef<HTMLDivElement>(null);
+    const isProcessingRef = useRef(false); // Evita chiamate ricorsive
+
+
+
+    // Funzioni spostate dentro la funzione App
+    const handleWelcomeNext = () => {
+      // This function is no longer needed as registration is on the same screen
+    };
+
+    // TEMPORANEO: Logica semplificata per testare
+    const handleRegistrationSubmit = (e: React.FormEvent) => {
+      e.preventDefault();
+      console.log('Registration form submitted');
+      // Logica temporanea per testare
+      setShowWelcomeScreen(false);
+    };
+
+    const handleRegistrationInputChange = (field: string, value: string) => {
+      setRegistrationData(prev => ({
+        ...prev,
+        [field]: value
+      }));
+      
+      // Update language when changed
+      if (field === 'language') {
+        setLanguage(value);
+      }
+    };
+
+    const handleKeyPress = (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        handleSendMessage();
+      }
+    };
+
+
+
+    const handleActionClick = (actionText: string) => {
+      setInputMessage(actionText);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    };
+
+    const handleLogout = () => {
+      // Clear user data from localStorage
+      localStorage.removeItem('nyra_user');
+      localStorage.removeItem('nyra_stay_connected');
+      localStorage.removeItem('nyra_conversations');
+      localStorage.removeItem('nyra_conversation_messages');
+      localStorage.removeItem('nyra_conversation_counter');
+      localStorage.removeItem('nyra_actions');
+      
+      // Reset all state
+      setCurrentUser(null);
+      setChats([]);
+      setConversationMessages({});
+      setActiveConversationId(null);
+      setMessages([]);
+      setActions([]);
+      setConversationCounter(1);
+      
+      // Show welcome screen
+      setShowWelcomeScreen(true);
+      setShowWelcomeMessage(true);
+      setIsFirstMessage(true);
+    };
+
+    const togglePasswordVisibility = () => {
+      setShowPasswordVisible(!showPassword);
+    };
+
+    // Localization object
+    const texts = {
+      Italiano: {
+        // Welcome screen
+        welcomeTitle: "Welcome to NYRA",
+        welcomeSubtitle: "Your personal AI assistant to write, plan, organize and automate on your computer.",
+        welcomeBack: "Welcome back",
+        getStarted: "Get started",
+        signIn: "Sign In",
+        signUp: "Sign up",
+        logIn: "Log in",
+        startUsingNyra: "Start using NYRA",
+        dontHaveAccount: "Don't have an account?",
+        alreadyHaveAccount: "Already have an account?",
+        selectLanguage: "Select your language",
+        stayConnected: "Resta collegato",
+        
+        // Main interface
+        newChat: "Nuova chat",
+        recentConversations: "Conversazioni Recenti",
+        online: "Online",
+        offline: "Offline",
+        // DA RIMUOVERE: risposta fissa preimpostata usata per test
+        // welcomeMessage: "Ciao {name}, come posso aiutarti oggi?",
+        messagePlaceholder: "Invia messaggio a Nyra",
+        
+        // Quick actions
+        writeEmail: "Scrivi una mail",
+        setCalendar: "Imposta calendario", 
+        openFile: "Apri un file",
+        openSafari: "Apri Safari",
+        
+        // Quick action texts
+        emailText: "Ciao Nyra, scrivi una mail a [inserisci destinatario]",
+        calendarText: "Ciao Nyra, crea un evento per [inserisci data e ora]",
+        fileText: "Ciao Nyra, apri il file [inserisci nome file]",
+        safariText: "Ciao Nyra, apri Safari e vai su [inserisci sito web]",
+        
+        // Settings
+        settings: "Impostazioni",
+        preferences: "Preferenze",
+        aiModel: "Modello AI",
+        selectModel: "Seleziona modello",
+        account: "Account",
+        subscription: "Abbonamento",
+        subscriptionManagement: "Gestione abbonamento",
+        standardPlan: "Piano Standard",
+        
+        // Action history
+        actionHistory: "Action History",
+        noActionsYet: "No actions yet",
+        
+        // DA RIMUOVERE: risposte fisse preimpostate usate per test
+        // AI responses
+        // emailResponse: "Perfetto! Posso aiutarti con la gestione delle email. Dimmi cosa devi fare: scrivere, inviare o organizzare la posta?",
+        // calendarResponse: "Ottimo! Ti aiuto con il calendario. Vuoi creare un nuovo evento, controllare gli appuntamenti o modificare qualcosa?",
+        // fileResponse: "Perfetto! Posso aiutarti con i file. Cosa devi fare: aprire, organizzare o cercare documenti?",
+        // safariResponse: "Perfetto! Ti aiuto con la navigazione web. Quale sito vuoi visitare o cosa devi cercare?",
+        // greetingResponse: "Ciao! Sono qui per aiutarti. Cosa posso fare per te oggi?",
+        // generalResponse: "Ho capito. Come posso aiutarti con questo?",
+        
+        // Chat titles
+        emailManagement: "Gestione Email",
+        calendarManagement: "Gestione Calendario", 
+        fileManagement: "Gestione File",
+        webNavigation: "Navigazione Web",
+        generalConversation: "Conversazione Generale",
+        generalAssistance: "Assistenza Generale",
+        
+        // Action descriptions
+        emailAssistance: "Assistenza gestione email richiesta",
+        calendarAssistance: "Assistenza calendario richiesta",
+        fileAssistance: "Assistenza gestione file richiesta",
+        webAssistance: "Assistenza navigazione web richiesta",
+        generalConversationStarted: "Conversazione generale iniziata",
+        generalAssistanceProvided: "Assistenza generale fornita",
+        
+        // Error messages
+        apiTimeoutError: "⚠️ Il server AI non ha risposto (timeout). Riprova tra poco.",
+        apiConnectionError: "⚠️ Errore di connessione al server AI. Verifica la connessione internet.",
+        apiGenericError: "⚠️ Errore del server AI. Riprova più tardi.",
+        noResponseError: "⚠️ Nessuna risposta dal server AI. Riprova.",
+        fallbackMessage: "⚠️ Servizio temporaneamente non disponibile. Riprova tra qualche minuto."
+      },
+      English: {
+        // Welcome screen
+        welcomeTitle: "Welcome to NYRA",
+        welcomeSubtitle: "Your personal AI assistant to write, plan, organize and automate on your computer.",
+        welcomeBack: "Welcome back",
+        getStarted: "Get started", 
+        signIn: "Sign In",
+        signUp: "Sign up",
+        logIn: "Log in",
+        startUsingNyra: "Start using NYRA",
+        dontHaveAccount: "Don't have an account?",
+        alreadyHaveAccount: "Already have an account?",
+        selectLanguage: "Select your language",
+        stayConnected: "Stay connected",
+        
+        // Main interface
+        newChat: "New chat",
+        recentConversations: "Recent Conversations",
+        online: "Online",
+        offline: "Offline", 
+        // DA RIMUOVERE: risposta fissa preimpostata usata per test
+        // welcomeMessage: "Hi {name}, how can I help you today?",
+        messagePlaceholder: "Send message to Nyra",
+        
+        // Quick actions
+        writeEmail: "Write an email",
+        setCalendar: "Set calendar",
+        openFile: "Open a file", 
+        openSafari: "Open Safari",
+        
+        // Quick action texts
+        emailText: "Hi Nyra, write an email to [insert recipient]",
+        calendarText: "Hi Nyra, create an event for [insert date and time]",
+        fileText: "Hi Nyra, open the file [insert file name]",
+        safariText: "Hi Nyra, open Safari and go to [insert website]",
+        
+        // Settings
+        settings: "Settings",
+        preferences: "Preferences", 
+        aiModel: "AI Model",
+        selectModel: "Select model",
+        account: "Account",
+        subscription: "Subscription",
+        subscriptionManagement: "Subscription management",
+        standardPlan: "Standard Plan",
+        
+        // Action history
+        actionHistory: "Action History",
+        noActionsYet: "No actions yet",
+        
+        // DA RIMUOVERE: risposte fisse preimpostate usate per test
+        // AI responses
+        // emailResponse: "Perfect! I can help you with email management. Tell me what you need to do: write, send or organize mail?",
+        // calendarResponse: "Great! I'll help you with the calendar. Do you want to create a new event, check appointments or modify something?",
+        // fileResponse: "Perfect! I can help you with files. What do you need to do: open, organize or search documents?",
+        // safariResponse: "Perfect! I'll help you with web navigation. Which site do you want to visit or what do you need to search for?",
+        // greetingResponse: "Hi! I'm here to help you. What can I do for you today?",
+        // generalResponse: "I understand. How can I help you with this?",
+        
+        // Chat titles
+        emailManagement: "Email Management",
+        calendarManagement: "Calendar Management",
+        fileManagement: "File Management", 
+        webNavigation: "Web Navigation",
+        generalConversation: "General Conversation",
+        generalAssistance: "General Assistance",
+        
+        // Action descriptions
+        emailAssistance: "Email management assistance requested",
+        calendarAssistance: "Calendar assistance requested", 
+        fileAssistance: "File management assistance requested",
+        webAssistance: "Web navigation assistance requested",
+        generalConversationStarted: "General conversation started",
+        generalAssistanceProvided: "General assistance provided",
+        
+        // Error messages
+        apiTimeoutError: "⚠️ AI server did not respond (timeout). Try again in a moment.",
+        apiConnectionError: "⚠️ Connection error to AI server. Check your internet connection.",
+        apiGenericError: "⚠️ AI server error. Try again later.",
+        noResponseError: "⚠️ No response from AI server. Try again.",
+        fallbackMessage: "⚠️ Service temporarily unavailable. Try again in a few minutes."
+      }
+    };
+    
+    // Get current language texts
+    const t = texts[language as keyof typeof texts] || texts.Italiano;
+
+    // Handle language change
+    const handleLanguageChange = (newLanguage: string) => {
+      setLanguage(newLanguage);
+    };
+
+    // Handle theme change
+    const handleThemeChange = (newTheme: 'light' | 'dark' | 'system') => {
+      setTheme(newTheme);
+      localStorage.setItem('nyra_theme', newTheme);
+      
+      let shouldBeDark = false;
+      if (newTheme === 'system') {
+        shouldBeDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      } else {
+        shouldBeDark = newTheme === 'dark';
+      }
+      
+      setIsDarkMode(shouldBeDark);
+      
+      if (shouldBeDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    };
+
+    // Dark mode toggle (for existing toggle button)
+    const toggleDarkMode = () => {
+      const newTheme = isDarkMode ? 'light' : 'dark';
+      handleThemeChange(newTheme);
+    };
+
+    // Initialize dark mode on mount
+    useEffect(() => {
+      // Apply dark mode class immediately on mount
+      if (isDarkMode) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+      
+      // Listen for system theme changes when theme is set to 'system'
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+      const handleSystemThemeChange = (e: MediaQueryListEvent) => {
+        if (theme === 'system') {
+          setIsDarkMode(e.matches);
+          if (e.matches) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        }
+      };
+      
+      mediaQuery.addEventListener('change', handleSystemThemeChange);
+      
+      return () => {
+        mediaQuery.removeEventListener('change', handleSystemThemeChange);
+      };
+    }, [isDarkMode, theme]);
+
+    // Update theme when theme state changes
+    useEffect(() => {
+      let shouldBeDark = false;
+      if (theme === 'system') {
+        shouldBeDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      } else {
+        shouldBeDark = theme === 'dark';
+      }
+      
+      setIsDarkMode(shouldBeDark);
+      
+      if (shouldBeDark) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    }, [theme]);
+
+    // Initialize speech recognition
+    useEffect(() => {
+      // Close user menu when clicking outside
+      const handleClickOutside = (event: MouseEvent) => {
+        if (showUserMenu) {
+          const target = event.target as Element;
+          if (!target.closest('.user-profile')) {
+            setShowUserMenu(false);
+          }
+        }
+      };
+
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }, [showUserMenu]);
+
+    // Helper function to map language to BCP 47 language tags
+    const getLanguageCode = (lang: string): string => {
+      switch (lang) {
+        case 'English':
+          return 'en-US';
+        case 'Italiano':
+        default:
+          return 'it-IT';
+      }
+    };
+
+    // Initialize speech recognition with dynamic language
+    useEffect(() => {
+      const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+      
+      if (SpeechRecognition) {
+        const recognitionInstance = new SpeechRecognition();
+        recognitionInstance.continuous = true;
+        recognitionInstance.interimResults = true;
+        recognitionInstance.lang = getLanguageCode(language);
+        
+        recognitionInstance.onresult = (event: SpeechRecognitionEvent) => {
+          let transcript = '';
+          for (let i = event.resultIndex; i < event.results.length; i++) {
+            transcript += event.results[i][0].transcript;
+          }
+          setInputMessage(transcript);
+        };
+        
+        recognitionInstance.onend = () => {
+          setIsListening(false);
+        };
+        
+        recognitionInstance.onerror = (event: Event) => {
+          console.error('Speech recognition error:', event);
+          setIsListening(false);
+        };
+        
+        setRecognition(recognitionInstance);
+        setIsRecognitionSupported(true);
+      } else {
+        setIsRecognitionSupported(false);
+      }
+    }, [language]); // Solo language nelle dipendenze
+
+    // Cleanup effect separato per evitare cicli infiniti
+    useEffect(() => {
+      return () => {
+        if (recognition) {
+          recognition.stop();
+        }
+      };
+    }, []); // Array vuoto - eseguito solo al mount/unmount
+
+         // Test IPC connection quando app si carica
+     useEffect(() => {
+       const testIPC = async () => {
+         if (electronBridge.isElectron()) {
+           console.log('🔗 Testing IPC connection...');
+           
+           const connected = await electronBridge.testConnection();
+           if (connected) {
+             console.log('✅ IPC connection successful');
+             
+             const appInfo = await electronBridge.getAppInfo();
+             console.log('📱 App info:', appInfo);
+             
+             // Setup automation status listener
+             electronBridge.onStatusUpdate((status) => {
+               console.log('Automation status update:', status);
+               
+               // Mostra status updates nella chat se c'è un'automazione in corso
+               if (status.type === 'action' || status.type === 'success') {
+                 // Potresti aggiungere un banner temporaneo con lo status
+                 console.log(`NYRA: ${status.message}`);
+               }
+             });
+             
+             await electronBridge.logToMain('NYRA renderer loaded successfully');
+             
+             // Test visual automation - removed for now
+             console.log('Visual automation test skipped');
+           }
+         }
+       };
+       
+       testIPC();
+     }, []);
+
+    // Test IPC function - versione sicura per il bottone
+    const testIPC = async () => {
+      setIpcTesting(true);
+      setIpcTestResult('Testing...');
+      
+      try {
+        // Controllo sicuro per window.electronAPI
+        if (typeof window !== 'undefined' && window.electronAPI) {
+          console.log('🔗 ElectronAPI trovata, testing ping...');
+          
+          try {
+            const pingResult = await window.electronAPI.ping();
+            console.log('Ping result:', pingResult);
+            
+            const appVersion = await window.electronAPI.getAppVersion();
+            const platform = window.electronAPI.getPlatform();
+            console.log('📱 App info:', { appVersion, platform });
+            
+            setIpcTestResult(`✅ IPC OK! Ping: ${pingResult}, Version: ${appVersion}, Platform: ${platform}`);
+          } catch (apiError: any) {
+            console.error('❌ Errore chiamata ElectronAPI:', apiError);
+            setIpcTestResult(`❌ Errore ElectronAPI: ${apiError.message}`);
+          }
+          
+        } else {
+          console.log('❌ ElectronAPI non disponibile');
+          setIpcTestResult('❌ ElectronAPI non disponibile');
+        }
+        
+      } catch (error: any) {
+        console.error('❌ Errore test IPC:', error);
+        setIpcTestResult(`❌ Errore IPC: ${error.message}`);
+      }
+      
+      setIpcTesting(false);
+    };
+
+    // Test completo ElectronAPI
+    const testElectronAPI = async () => {
+      console.log('🧪 === TEST COMPLETO ELECTRONAPI ===');
+      
+      // Controllo sicuro per window.electronAPI
+      if (typeof window !== 'undefined' && window.electronAPI) {
+        console.log('🔗 ElectronAPI trovata, testing tutte le funzioni...');
+        
+        try {
+          // Test ping
+          const pingResult = await window.electronAPI.ping();
+          console.log('✅ Ping result:', pingResult);
+          
+          // Test app info
+          const appVersion = await window.electronAPI.getAppVersion();
+          const platform = window.electronAPI.getPlatform();
+          console.log('✅ App version:', appVersion);
+          console.log('✅ Platform:', platform);
+          
+          // Test testIPC
+          const testIPCResult = await window.electronAPI.testIPC();
+          console.log('✅ TestIPC result:', testIPCResult);
+          
+          // Test sendMessage
+          const sendMessageResult = await window.electronAPI.sendMessage('Test message from renderer');
+          console.log('✅ SendMessage result:', sendMessageResult);
+          
+          // Test log
+          await window.electronAPI.log('Test log message from renderer');
+          console.log('✅ Log message sent');
+          
+          // Test store methods
+          const storeSetResult = await window.electronAPI.storeSet('test-key', 'test-value');
+          console.log('✅ StoreSet result:', storeSetResult);
+          
+          const storeGetResult = await window.electronAPI.storeGet('test-key');
+          console.log('✅ StoreGet result:', storeGetResult);
+          
+          // Test automation methods (solo test di disponibilità, non esecuzione)
+          console.log('✅ startAutomation disponibile:', typeof window.electronAPI.startAutomation === 'function');
+          console.log('✅ closeBrowser disponibile:', typeof window.electronAPI.closeBrowser === 'function');
+          console.log('✅ resetAutomation disponibile:', typeof window.electronAPI.resetAutomation === 'function');
+          console.log('✅ onAutomationStatus disponibile:', typeof window.electronAPI.onAutomationStatus === 'function');
+          console.log('✅ removeAutomationStatusListener disponibile:', typeof window.electronAPI.removeAutomationStatusListener === 'function');
+          
+          setIpcTestResult('✅ Tutte le funzioni ElectronAPI sono disponibili e funzionanti!');
+          
+        } catch (apiError: any) {
+          console.error('❌ Errore chiamata ElectronAPI:', apiError);
+          setIpcTestResult(`❌ Errore ElectronAPI: ${apiError.message}`);
+        }
+      } else {
+        console.log('❌ ElectronAPI non disponibile');
+        setIpcTestResult('❌ ElectronAPI non disponibile');
+      }
+    };
+
+    // Auto scroll to bottom when new messages are added
+    const scrollToBottom = () => {
+      messagesEndRef.current?.scrollIntoView({ 
+        behavior: 'smooth',
+        block: 'end'
+      });
+    };
+
+    // Scroll when messages change
+    useEffect(() => {
+      if (messages.length > 0) {
+        scrollToBottom();
+      }
+    }, [messages]);
+
+    // Load conversations and actions from localStorage on mount
+    useEffect(() => {
+      const savedChats = localStorage.getItem('nyra_conversations');
+      const savedActions = localStorage.getItem('nyra_actions');
+      const savedMessages = localStorage.getItem('nyra_conversation_messages');
+      const savedCounter = localStorage.getItem('nyra_conversation_counter');
+      
+      if (savedChats) {
+        try {
+          const parsedChats = JSON.parse(savedChats).map((chat: any) => ({
+            ...chat,
+            timestamp: new Date(chat.timestamp)
+          }));
+          setChats(parsedChats);
+        } catch (error) {
+          console.error('Error loading conversations:', error);
+        }
+      }
+      
+      if (savedMessages) {
+        try {
+          const parsedMessages = JSON.parse(savedMessages);
+          setConversationMessages(parsedMessages);
+        } catch (error) {
+          console.error('Error loading conversation messages:', error);
+        }
+      }
+      
+      if (savedCounter) {
+        setConversationCounter(parseInt(savedCounter, 10));
+      }
+      
+      if (savedActions) {
+        try {
+          const parsedActions = JSON.parse(savedActions).map((action: any) => ({
+            ...action,
+            timestamp: new Date(action.timestamp)
+          }));
+          setActions(parsedActions);
+        } catch (error) {
+          console.error('Error loading actions:', error);
+        }
+      }
+    }, []);
+
+    // Save conversations to localStorage whenever chats change
+    useEffect(() => {
+      console.log('🔄 setState: Saving chats to localStorage', chats.length);
+      localStorage.setItem('nyra_conversations', JSON.stringify(chats));
+    }, [chats]);
+
+    // Save conversation messages to localStorage
+    useEffect(() => {
+      console.log('🔄 setState: Saving conversationMessages to localStorage', Object.keys(conversationMessages).length);
+      localStorage.setItem('nyra_conversation_messages', JSON.stringify(conversationMessages));
+    }, [conversationMessages]);
+
+    // Save conversation counter to localStorage
+    useEffect(() => {
+      console.log('🔄 setState: Saving conversationCounter to localStorage', conversationCounter);
+      localStorage.setItem('nyra_conversation_counter', conversationCounter.toString());
+    }, [conversationCounter]);
+
+    // Save actions to localStorage whenever actions change
+    useEffect(() => {
+      console.log('🔄 setState: Saving actions to localStorage', actions.length);
+      localStorage.setItem('nyra_actions', JSON.stringify(actions));
+    }, [actions]);
+
+    // Save language to localStorage whenever it changes
+    useEffect(() => {
+      console.log('🔄 setState: Saving language to localStorage', language);
+      localStorage.setItem('nyra_language', language);
+    }, [language]);
+
+    // Check if app is ready (all initial data loaded)
+    useEffect(() => {
+      // App is ready when:
+      // 1. Welcome screen is not shown (user is logged in)
+      // 2. Or welcome screen is shown but user has interacted
+      if (!shouldShowWelcome || (shouldShowWelcome && currentUser)) {
+        setIsAppReady(true);
+      }
+    }, [shouldShowWelcome, currentUser]);
+
+
+
+    const quickActions = [
+      { icon: Mail, label: t.writeEmail, action: 'email', text: t.emailText },
+      { icon: Calendar, label: t.setCalendar, action: 'calendar', text: t.calendarText },
+      { icon: FolderOpen, label: t.openFile, action: 'file', text: t.fileText },
+      { icon: Globe, label: t.openSafari, action: 'safari', text: t.safariText },
+    ];
+
+    const handleNewChat = () => {
+      // Create new conversation
+      const newChat: Chat = {
+        id: Date.now().toString(),
+        name: `Chat #${conversationCounter}`,
+        lastMessage: '',
+        timestamp: new Date(),
+        isActive: true
+      };
+
+      // Update chat list: deactivate all others and add new one at top
+      setChats(prevChats => [
+        newChat,
+        ...prevChats.map(chat => ({ ...chat, isActive: false }))
+      ]);
+
+      // Set as active conversation
+      setActiveConversationId(newChat.id);
+      setConversationCounter(prev => prev + 1);
+      
+      // Reset conversation state
+      setMessages([]);
+      setInputMessage('');
+      setShowWelcomeScreen(false);
+      setIsFirstMessage(true);
+      setShowWelcomeMessage(true);
+    };
+
+    const toggleSpeechRecognition = () => {
+      if (!recognition || !isRecognitionSupported) return;
+      
+      if (isListening) {
+        recognition.stop();
+        setIsListening(false);
+      } else {
+        recognition.start();
+        setIsListening(true);
+      }
+    };
+
+    const handleConversationClick = (conversationId: string) => {
+      // Set as active conversation
+      setChats(prevChats => 
+        prevChats.map(chat => ({
+          ...chat,
+          isActive: chat.id === conversationId
+        }))
+      );
+      
+      setActiveConversationId(conversationId);
+      
+      // Load conversation messages
+      const conversationMsgs = conversationMessages[conversationId] || [];
+      setMessages(conversationMsgs);
+      
+      // Hide welcome message if there are messages
+      setShowWelcomeMessage(conversationMsgs.length === 0);
+      setIsFirstMessage(conversationMsgs.length === 0);
+    };
+
+    const getConversationTitle = (messageContent: string): string => {
+      const content = messageContent.toLowerCase();
+      if (content.includes('email') || content.includes('mail')) return 'Email Management';
+      if (content.includes('calendario') || content.includes('appuntamento')) return 'Calendar Planning';
+      if (content.includes('file') || content.includes('documento')) return 'File Management';
+      if (content.includes('safari') || content.includes('browser')) return 'Web Navigation';
+      return `Chat #${conversationCounter}`;
+    };
+
+    const adjustTextareaHeight = () => {
+      if (textareaRef.current) {
+        const textarea = textareaRef.current;
+        textarea.style.height = 'auto';
+        const scrollHeight = textarea.scrollHeight;
+        
+        // Minimo 1 riga (circa 40px), massimo 5 righe (circa 120px)
+        const minHeight = 40;
+        const maxHeight = 120;
+        const newHeight = Math.min(Math.max(scrollHeight, minHeight), maxHeight);
+        
+        textarea.style.height = `${newHeight}px`;
+        textarea.style.overflowY = scrollHeight > maxHeight ? 'auto' : 'hidden';
+      }
+    };
+
+    const handleSendMessage = async () => {
+      if (!inputMessage.trim()) return;
+
+      const userMessage: Message = {
+        id: Date.now().toString(),
+        text: inputMessage.trim(),
+        isUser: true,
+        timestamp: new Date()
+      };
+      callOpenRouterAPI();
+      setIsFirstMessage(false);
+      // Create new conversation if none exists
+      let currentChatId = activeConversationId;
+      if (!currentChatId || chats.length === 0) {
+        const chatTitle = getConversationTitle(inputMessage.trim());
+        const newChat: Chat = {
+          id: Date.now().toString(),
+          name: chatTitle,
+          lastMessage: inputMessage.trim(),
+          timestamp: new Date(),
+          isActive: true
+        };
+        
+        setChats(prevChats => [
+          newChat,
+          ...prevChats.map(chat => ({ ...chat, isActive: false }))
+        ]);
+        
+        currentChatId = newChat.id;
+        setActiveConversationId(currentChatId);
+        setConversationCounter(prev => prev + 1);
+      }
+
+      // Update conversation messages
+      setConversationMessages(prev => ({
+        ...prev,
+        [currentChatId!]: [...(prev[currentChatId!] || []), userMessage]
+      }));
+
+      setMessages(prev => [...prev, userMessage]);
+      setInputMessage('');
+      
+      // Reset altezza textarea
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.style.height = '40px';
+        }
+      }, 0);
+
+      // Hide welcome message on first user message
+      if (showWelcomeMessage) {
+        setShowWelcomeMessage(false);
+      }
+
+      // NUOVO: Sistema robusto di gestione messaggi
+      const conversation = new NaturalConversation();
+      const automation = new ReliableAutomation();
+      const formatter = new ResultFormatter();
+      
+      try {
+        // Analizza il messaggio per determinare l'azione
+        const parsedAction = actionParser.parseMessage(inputMessage.trim());
+        
+        if (parsedAction && parsedAction.confidence > 0.6) {
+          // Azione rilevata - esegui automazione
+          await handleAutomationAction(parsedAction, currentChatId!, conversation, automation, formatter);
+        } else {
+          // Nessuna azione rilevata - usa AI generica
+          await callOpenRouterAPI();
+        }
+        
+      } catch (error) {
+        console.error('Error in handleSendMessage:', error);
+        
+        // MAI mostrare errori tecnici all'utente
+        const errorResponse = ErrorHandler.handleTechnicalError(error, 'message handling');
+        
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: errorResponse.message,
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, errorMessage]);
+        setConversationMessages(prev => ({
+          ...prev,
+          [currentChatId!]: [...(prev[currentChatId!] || []), errorMessage]
+        }));
+      }
+    };
+
+    // NUOVO: Gestione azioni di automazione
+    const handleAutomationAction = async (
+      action: ParsedAction,
+      chatId: string,
+      conversation: NaturalConversation,
+      automation: ReliableAutomation,
+      formatter: ResultFormatter
+    ) => {
+      try {
+        // Messaggio di inizio naturale
+        const searchMsg = conversation.getSearchMessage(action.parameters.query, action.parameters.website);
+        const searchMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: searchMsg,
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, searchMessage]);
+        setConversationMessages(prev => ({
+          ...prev,
+          [chatId]: [...(prev[chatId] || []), searchMessage]
+        }));
+        
+        // Progresso discreto
+        const progressMsg = conversation.getProgressMessage();
+        const progressMessage: Message = {
+          id: (Date.now() + 2).toString(),
+          text: progressMsg,
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, progressMessage]);
+        setConversationMessages(prev => ({
+          ...prev,
+          [chatId]: [...(prev[chatId] || []), progressMessage]
+        }));
+        
+        // Esegui automazione robusta
+        const result = await automation.executeSearch(action.parameters.query, action.parameters.website);
+        
+        if (result.success) {
+          // Risultati formattati bene
+          const completedMsg = conversation.getCompletedMessage(result.data?.results?.length || 0);
+          const completedMessage: Message = {
+            id: (Date.now() + 3).toString(),
+            text: completedMsg,
+            isUser: false,
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, completedMessage]);
+          setConversationMessages(prev => ({
+            ...prev,
+            [chatId]: [...(prev[chatId] || []), completedMessage]
+          }));
+          
+          // Formatta risultati se disponibili
+          if (result.data?.results && result.data.results.length > 0) {
+            const formattedResults = formatter.formatAmazonResults(result.data.results, action.parameters.query);
+            const resultsMessage: Message = {
+              id: (Date.now() + 4).toString(),
+              text: formattedResults,
+              isUser: false,
+              timestamp: new Date()
+            };
+            
+            setMessages(prev => [...prev, resultsMessage]);
+            setConversationMessages(prev => ({
+              ...prev,
+              [chatId]: [...(prev[chatId] || []), resultsMessage]
+            }));
+          }
+          
+        } else {
+          // Fallback elegante senza errori tecnici
+          const fallbackMessage: Message = {
+            id: (Date.now() + 3).toString(),
+            text: result.message,
+            isUser: false,
+            timestamp: new Date()
+          };
+          
+          setMessages(prev => [...prev, fallbackMessage]);
+          setConversationMessages(prev => ({
+            ...prev,
+            [chatId]: [...(prev[chatId] || []), fallbackMessage]
+          }));
+        }
+        
+      } catch (error) {
+        console.error('Error in automation action:', error);
+        
+        // Gestione errori elegante
+        const errorResponse = ErrorHandler.handleAutomationError(error, action.parameters.query);
+        
+        const errorMessage: Message = {
+          id: (Date.now() + 3).toString(),
+          text: errorResponse.message,
+          isUser: false,
+          timestamp: new Date()
+        };
+        
+        setMessages(prev => [...prev, errorMessage]);
+        setConversationMessages(prev => ({
+          ...prev,
+          [chatId]: [...(prev[chatId] || []), errorMessage]
+        }));
+      }
+    };
+    //   // Add action to history
+    //   const newAction: Action = {
+    //     id: Date.now().toString() + '_action',
+    //     description: actionDescription,
+    //     timestamp: new Date(),
+    //     conversationId: currentChatId,
+    //     conversationTitle: chatTitle
+    //   };
+      
+    //   setActions(prevActions => [newAction, ...prevActions]);
+      
+    //   setIsFirstMessage(false);
+    // }, 500); // Reduced delay for efficiency
+
+    // Implementazione chiamata API OpenRouter con Context Builder
+    // Helper per descrivere l'azione in corso
+    const getActionDescription = (action: ParsedAction): string => {
+      switch (action.action) {
+        case 'search_real_estate':
+          return `Cercando appartamenti a ${action.parameters.location}`;
+        case 'web_search':
+          return `Cercando informazioni su "${action.parameters.query}"`;
+        case 'direct_navigation':
+          return `Navigando verso ${action.parameters.website}`;
+        case 'search_on_site':
+          return `Cercando ${action.parameters.query} su ${action.parameters.website}`;
+        default:
+          return 'Sto lavorando per te...';
+      }
+    };
+
+    // Helper per formattare risultati automazione con stile NYRA
+    const formatAutomationResults = (
+      automationData: any, 
+      aiResponse: string, 
+      action: ParsedAction
+    ): string => {
+      if (!automationData.results || automationData.results.length === 0) {
+        return `${aiResponse}\n\nNessun risultato trovato.`;
+      }
+
+      let response = `${aiResponse}\n\n`;
+      
+      if (action.type === 'universal_automation') {
+        const website = action.parameters.website;
+        response += `Risultati da ${website}\n\n`;
+        
+        automationData.results.slice(0, 3).forEach((item: any, index: number) => {
+          response += `${index + 1}. ${item.title || 'Risultato'}\n`;
+          if (item.description) response += `   ${item.description}\n`;
+          if (item.url && item.url !== '#') response += `   Link: ${item.url}\n`;
+          response += '\n';
+        });
+        
+        response += `Vuoi che esegua altre azioni su ${website}?`;
+      } else if (action.action === 'search_real_estate') {
+        response += `Appartamenti a ${action.parameters.location}\n\n`;
+        
+        automationData.results.slice(0, 5).forEach((item: any, index: number) => {
+          response += `${index + 1}. ${item.title || 'Appartamento'}\n`;
+          if (item.price) response += `   Prezzo: ${item.price}\n`;
+          if (item.location) response += `   Zona: ${item.location}\n`;
+          if (item.link && item.link !== '#') response += `   Dettagli: ${item.link}\n`;
+          response += '\n';
+        });
+        
+        if (automationData.results.length > 5) {
+          response += `... e altri ${automationData.results.length - 5} risultati.\n\n`;
+        }
+        
+      } else if (action.action === 'web_search') {
+        response += `Risultati per "${action.parameters.query}"\n\n`;
+        
+        automationData.results.slice(0, 5).forEach((item: any, index: number) => {
+          response += `${index + 1}. ${item.title || 'Risultato'}\n`;
+          if (item.description) response += `   ${item.description}\n`;
+          if (item.link && item.link !== '#') response += `   Link: ${item.link}\n`;
+          response += '\n';
+        });
+      }
+      
+      return response;
+    };
+
+    const callOpenRouterAPI = async () => {
+      // Evita chiamate ricorsive
+      if (isProcessingRef.current) {
+        console.log('⚠️ Chiamata API già in corso, ignorando');
+        return;
+      }
+      
+      isProcessingRef.current = true;
+      
+      try {
+        // Get current chat ID
+        let currentChatId = activeConversationId;
+        if (!currentChatId || chats.length === 0) {
+          // Create new chat if none exists
+          const newChat: Chat = {
+            id: `chat_${conversationCounter}`,
+            name: `Conversazione ${conversationCounter}`,
+            lastMessage: inputMessage.trim(),
+            timestamp: new Date(),
+            isActive: true
+          };
+          
+                  console.log('🔄 setState: setChats - adding new chat');
+        setChats(prev => [newChat, ...prev]);
+        console.log('🔄 setState: setConversationCounter - incrementing');
+        setConversationCounter(prev => prev + 1);
+        currentChatId = newChat.id;
+        console.log('🔄 setState: setActiveConversationId - setting to', currentChatId);
+        setActiveConversationId(currentChatId);
+        }
+        
+        const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+        
+        if (!apiKey) {
+          console.error('❌ Errore: Chiave API OpenRouter non configurata');
+          const errorMessage: Message = {
+            id: (Date.now() + 1).toString(),
+            text: t.apiGenericError,
+            isUser: false,
+            timestamp: new Date()
+          };
+          console.log('🔄 setState: setMessages - adding API error message');
+          setMessages(prev => [...prev, errorMessage]);
+          console.log('🔄 setState: setConversationMessages - adding API error to chat', currentChatId);
+          setConversationMessages(prev => ({
+            ...prev,
+            [currentChatId!]: [...(prev[currentChatId!] || []), errorMessage]
+          }));
+          return;
+        }
+
+        console.log('📤 Invio messaggio a OpenRouter con contesto:', inputMessage.trim());
+        
+        // Validazione robusta dei messaggi prima dell'invio
+        const validMessages = messages.filter(msg => {
+          if (!msg || typeof msg !== 'object') {
+            console.warn('⚠️ Messaggio non valido (non è un oggetto):', msg);
+            return false;
+          }
+          if (!msg.text || typeof msg.text !== 'string' || msg.text.trim() === '') {
+            console.warn('⚠️ Messaggio senza contenuto valido:', msg);
+            return false;
+          }
+          return true;
+        });
+        
+        console.log(`✅ ${validMessages.length} messaggi validi su ${messages.length} totali`);
+        
+        // Mostra loading indicator
+        setIsNyraThinking(true);
+        
+        // Usa il Context Builder per ottenere risposta intelligente
+        const aiResponseText = await openRouter.getResponseWithContext(
+          validMessages,      // messaggi validati
+          currentUser,        // info utente
+          inputMessage.trim() // messaggio corrente
+        );
+
+        console.log('Risposta AI generata con contesto:', aiResponseText);
+
+        // AGGIUNGI: Nascondi loading indicator
+        setIsNyraThinking(false);
+
+        // Dopo aver ricevuto la risposta AI, analizza se serve automation
+        const parsedAction = actionParser.parseMessage(inputMessage.trim());
+
+        if (parsedAction && parsedAction.confidence > 0.6) {
+          console.log('Azione rilevata:', parsedAction);
+          
+          // Mostra status naturale invece di robotico
+          const automationStatusMessage: Message = {
+            id: (Date.now() + 2).toString(),
+            text: getActionDescription(parsedAction),
+            isUser: false,
+            timestamp: new Date()
+          };
+          
+          console.log('🔄 setState: setMessages - adding automation status message');
+          setMessages(prev => [...prev, automationStatusMessage]);
+          console.log('🔄 setState: setConversationMessages - adding automation status to chat', currentChatId);
+          setConversationMessages(prev => ({
+            ...prev,
+            [currentChatId!]: [...(prev[currentChatId!] || []), automationStatusMessage]
+          }));
+          
+          try {
+            // Esegui automazione
+            const actionResult = await actionParser.executeAction(parsedAction);
+            
+            if (actionResult.success && actionResult.data) {
+              // Crea risposta enhanced con risultati visual automation
+              const enhancedResponse = formatAutomationResults(
+                actionResult.data, 
+                aiResponseText,
+                parsedAction
+              );
+              
+              // Sostituisci la risposta AI normale con quella enhanced
+              const enhancedAiResponse: Message = {
+                id: (Date.now() + 3).toString(),
+                text: enhancedResponse,
+                isUser: false,
+                timestamp: new Date()
+              };
+              
+              console.log('🔄 setState: setMessages - adding enhanced AI response');
+              setMessages(prev => [...prev, enhancedAiResponse]);
+              console.log('🔄 setState: setConversationMessages - adding enhanced response to chat', currentChatId);
+              setConversationMessages(prev => ({
+                ...prev,
+                [currentChatId!]: [...(prev[currentChatId!] || []), enhancedAiResponse]
+              }));
+              
+            } else {
+              // Automazione fallita, mostra errore
+              const errorResponse: Message = {
+                id: (Date.now() + 3).toString(),
+                text: `❌ ${actionResult.message}\n\n${aiResponseText}`,
+                isUser: false,
+                timestamp: new Date()
+              };
+              
+              setMessages(prev => [...prev, errorResponse]);
+              setConversationMessages(prev => ({
+                ...prev,
+                [currentChatId!]: [...(prev[currentChatId!] || []), errorResponse]
+              }));
+            }
+            
+          } catch (error) {
+            console.error('❌ Errore esecuzione automazione:', error);
+            
+            // Fallback alla risposta AI normale
+            const fallbackResponse: Message = {
+              id: (Date.now() + 3).toString(),
+              text: `⚠️ Automazione non disponibile.\n\n${aiResponseText}`,
+              isUser: false,
+              timestamp: new Date()
+            };
+            
+            setMessages(prev => [...prev, fallbackResponse]);
+            setConversationMessages(prev => ({
+              ...prev,
+              [currentChatId!]: [...(prev[currentChatId!] || []), fallbackResponse]
+            }));
+          }
+          
+        } else {
+          // Nessuna automazione rilevata, risposta AI normale
+          const aiResponse: Message = {
+            id: (Date.now() + 1).toString(),
+            text: aiResponseText,
+            isUser: false,
+            timestamp: new Date()
+          };
+
+          console.log('🔄 setState: setMessages - adding normal AI response');
+          setMessages(prev => [...prev, aiResponse]);
+          console.log('🔄 setState: setConversationMessages - adding normal response to chat', currentChatId);
+          setConversationMessages(prev => ({
+            ...prev,
+            [currentChatId!]: [...(prev[currentChatId!] || []), aiResponse]
+          }));
+        }
+        
+        // Update chat with last message
+        setChats(prevChats => 
+          prevChats.map(chat => 
+            chat.id === currentChatId 
+            ? { ...chat, lastMessage: aiResponseText }
+            : chat
+          )
+        );
+        
+        // Add action to history
+        const newAction: Action = {
+          id: Date.now().toString() + '_action',
+          description: `Messaggio inviato e risposta AI ricevuta con contesto`,
+          timestamp: new Date(),
+          conversationId: currentChatId,
+          conversationTitle: getConversationTitle(inputMessage.trim())
+        };
+        
+        setActions(prevActions => [newAction, ...prevActions]);
+
+      } catch (error) {
+        console.error('❌ Errore chiamata API OpenRouter:', error);
+        
+        // Nascondi loading indicator anche in caso di errore
+        setIsNyraThinking(false);
+        
+        let errorText = t.apiGenericError;
+        if (error instanceof Error) {
+          if (error.message.includes('timeout')) {
+            errorText = t.apiTimeoutError;
+          } else if (error.message.includes('fetch')) {
+            errorText = t.apiConnectionError;
+          }
+        }
+
+        const errorMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          text: errorText,
+          isUser: false,
+          timestamp: new Date()
+        };
+
+        setMessages(prev => [...prev, errorMessage]);
+        setConversationMessages(prev => ({
+          ...prev,
+          [currentChatId!]: [...(prev[currentChatId!] || []), errorMessage]
+        }));
+      } finally {
+        // Reset del flag di processing
+        isProcessingRef.current = false;
+        setIsNyraThinking(false);
+      }
+    };
+
+    return (
+      <div className="app">
+      {/* Welcome Screen */}
+      {shouldShowWelcome ? (
+        <div className="unified-welcome-screen">
+          <div className="unified-welcome-overlay">
+            <div className="unified-welcome-container">
+              {/* Left Column - Welcome Content */}
+              <div className="unified-welcome-left">
+                <h1 className="unified-welcome-title">Welcome to NYRA</h1>
+                <p className="unified-welcome-subtitle">
+                  Your personal AI assistant to write, plan, organize and automate on your computer.
+                </p>
+                
+                <div className="unified-welcome-features">
+                  <div className="unified-welcome-feature">
+                    <Check className="unified-welcome-feature-icon" size={16} />
+                    <span>Write faster with AI assistance</span>
+                  </div>
+                  <div className="unified-welcome-feature">
+                    <Check className="unified-welcome-feature-icon" size={16} />
+                    <span>Organize files and apps with voice</span>
+                  </div>
+                  <div className="unified-welcome-feature">
+                    <Check className="unified-welcome-feature-icon" size={16} />
+                    <span>Schedule events with one sentence</span>
+                  </div>
+                  <div className="unified-welcome-feature">
+                    <Check className="unified-welcome-feature-icon" size={16} />
+                    <span>Full local privacy, cloud intelligence</span>
+                  </div>
+                </div>
+                
+                <div className="unified-welcome-tagline">
+                  Everything on your desktop, finally connected.
+                </div>
+              </div>
+              
+              {/* Right Column - Registration Panel */}
+              <div className="unified-welcome-right">
+                <div className="unified-registration-panel">
+                  <div className="unified-registration-header">
+                    <div className="unified-registration-logo">
+                      <span className="logo-text">Nyra</span>
+                    </div>
+                    <h2 className="unified-registration-title">
+                      {isLogin ? 'Welcome back' : 'Get started'}
+                    </h2>
+                  </div>
+                  
+                  <form onSubmit={handleRegistrationSubmit} className="unified-registration-form">
+                    {!isLogin && (
+                      <div className="unified-registration-field">
+                        <label>Username</label>
+                        <input
+                          type="text"
+                          value={registrationData.username}
+                          onChange={(e) => handleRegistrationInputChange('username', e.target.value)}
+                          placeholder="Your username"
+                          required
+                        />
+                      </div>
+                    )}
+                    
+                    <div className="unified-registration-field">
+                      <label>Email</label>
+                      <input
+                        type="email"
+                        value={registrationData.email}
+                        onChange={(e) => handleRegistrationInputChange('email', e.target.value)}
+                        placeholder="your@email.com"
+                        required
+                      />
+                    </div>
+                    
+                    <div className="unified-registration-field">
+                      <label>Password</label>
+                      <div className="unified-password-input-container">
+                        <input
+                          type={showPassword ? "text" : "password"}
+                          value={registrationData.password}
+                          onChange={(e) => handleRegistrationInputChange('password', e.target.value)}
+                          placeholder="••••••••"
+                          required
+                        />
+                        <button
+                          type="button"
+                          onClick={togglePasswordVisibility}
+                          className="unified-password-toggle"
+                        >
+                          {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                    </div>
+                    
+                    {/* Language Selection */}
+                    <div className="unified-registration-field">
+                      <label>Select your language</label>
+                      <select
+                        value={language}
+                        onChange={(e) => {
+                          setLanguage(e.target.value);
+                          setSelectedLanguage(e.target.value);
+                        }}
+                        className="w-full px-4 py-4 rounded-xl font-mono text-sm border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent transition-all duration-200"
+                        style={{ 
+                          backgroundColor: '#21262D', 
+                          color: '#C9D1D9'
+                        }}
+                      >
+                        <option value="Italiano">Italiano</option>
+                        <option value="English">English</option>
+                      </select>
+                    </div>
+                    
+                    {/* Stay Connected Checkbox */}
+                    <div className="unified-registration-field">
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          id="stayConnected"
+                          checked={stayConnected}
+                          onChange={(e) => setStayConnected(e.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 bg-white text-green-600 focus:ring-green-500 focus:ring-2"
+                        />
+                        <label htmlFor="stayConnected" className="text-sm text-gray-600">
+                          {t.stayConnected}
+                        </label>
+                      </div>
+                    </div>
+                    
+                    <button type="submit" className="unified-registration-submit">
+                      {isLogin ? t.signIn : t.startUsingNyra}
+                    </button>
+                  </form>
+                  
+                  <div className="unified-registration-footer">
+                    <span>
+                      {isLogin ? t.dontHaveAccount : t.alreadyHaveAccount}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsLogin(!isLogin)}
+                      className="unified-registration-toggle"
+                    >
+                      {isLogin ? t.signUp : t.logIn}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        // Fallback content quando welcome screen è nascosta
+        !isAppReady ? (
+          <div className="app">
+            <div className="main-content">
+              <div className="welcome-fallback">
+                <h1>Welcome to NYRA</h1>
+                <p>Loading your workspace...</p>
+              </div>
+            </div>
+          </div>
+        ) : null
+      )}
+      
+      {/* Sidebar */}
+      <div className={`sidebar ${sidebarOpen ? 'open' : 'closed'}`}>
+        {/* Header */}
+        <div className="sidebar-header">
+          <div className="logo-section">
+            <div className="logo">
+              <span className="logo-text">Nyra</span>
+            </div>
+            <button 
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="sidebar-toggle"
+            >
+              {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+            </button>
+          </div>
+          
+          {sidebarOpen && (
+            <button onClick={handleNewChat} className="new-chat-btn">
+              <Plus size={16} />
+              <span>{t.newChat}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Chat List */}
+        {sidebarOpen && (
+          <div className="chat-list">
+            <div className="section-title">{t.recentConversations}</div>
+            {chats.length === 0 ? (
+              <div className="text-center py-8">
+                <MessageSquare size={32} className="mx-auto mb-4 opacity-50" style={{ color: 'var(--text-secondary)' }} />
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>No conversations yet</p>
+                <p className="text-xs mt-1" style={{ color: 'var(--text-tertiary)' }}>Start a chat to see it here</p>
+              </div>
+            ) : (
+              chats.map(chat => (
+                <div 
+                  key={chat.id} 
+                  className={`chat-item ${chat.isActive ? 'active' : ''}`}
+                  onClick={() => handleConversationClick(chat.id)}
+                >
+                  <div className="chat-info">
+                    <div className="chat-name">{chat.name}</div>
+                    <div className="chat-preview">{chat.lastMessage}</div>
+                  </div>
+                  <div className="chat-time">{formatTime(chat.timestamp)}</div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* User Profile */}
+        <div className="sidebar-footer">
+          {sidebarOpen ? (
+            <div className="user-profile" style={{ position: 'relative' }}>
+              <div className="user-avatar">
+                {currentUser?.username ? currentUser.username.charAt(0).toUpperCase() : 'M'}
+              </div>
+              <div className="user-info">
+                <div className="user-name">{currentUser?.username || 'Marco'}</div>
+                <div className="user-status">{t.online}</div>
+              </div>
+              <button 
+                className="profile-menu"
+                onClick={() => setShowUserMenu(!showUserMenu)}
+              >
+                <MoreHorizontal size={16} />
+              </button>
+              
+              {/* User Menu Dropdown */}
+              {showUserMenu && (
+                <div className="user-menu-dropdown">
+                  <button 
+                    onClick={() => {
+                      setShowSettingsOverlay(true);
+                      setShowUserMenu(false);
+                    }}
+                    className="user-menu-item"
+                  >
+                    <Settings size={14} />
+                    <span>Settings</span>
+                  </button>
+                  <button 
+                    onClick={() => {
+                      handleLogout();
+                      setShowUserMenu(false);
+                    }}
+                    className="user-menu-item"
+                  >
+                    <User size={14} />
+                    <span>Logout</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="user-avatar-mini">
+              {currentUser?.username ? currentUser.username.charAt(0).toUpperCase() : 'M'}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="main-content">
+        {showSettings ? (
+          /* Settings Overlay */
+          <div className="settings-overlay">
+            <div className="settings-header">
+              <button 
+                onClick={() => setShowSettings(false)}
+                className="settings-back-btn"
+              >
+                <X size={20} />
+              </button>
+              <h1 className="settings-title">Settings</h1>
+            </div>
+            <div className="settings-content">
+              {/* Settings content will go here */}
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Top Bar */}
+            <div className="top-bar">
+              <div className="status-indicators">
+                <button 
+                  onClick={() => setIsOfflineMode(!isOfflineMode)}
+                  className={`offline-toggle ${isOfflineMode ? 'active' : ''}`}
+                  title={isOfflineMode ? 'Modalità offline attiva' : 'Modalità online'}
+                >
+                  {isOfflineMode ? <PowerOff size={16} /> : <Power size={16} />}
+                  <span>{isOfflineMode ? t.offline : t.online}</span>
+                </button>
+              </div>
+
+              <div className="top-actions">
+                {/* Test IPC Button - TEMPORANEO */}
+                <button 
+                  onClick={testIPC}
+                  disabled={ipcTesting}
+                  className="action-btn"
+                  title="Test IPC Communication"
+                  style={{
+                    backgroundColor: ipcTesting ? '#666' : '#007ACC',
+                    color: 'white',
+                    border: 'none',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    cursor: ipcTesting ? 'not-allowed' : 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    marginRight: '8px'
+                  }}
+                >
+                  {ipcTesting ? '⏳ Testing...' : '🔗 Test IPC'}
+                </button>
+                
+                <button 
+                  onClick={testElectronAPI}
+                  className="action-btn"
+                  title="Test Completo ElectronAPI"
+                  style={{
+                    backgroundColor: '#28a745',
+                    color: 'white',
+                    border: 'none',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    fontWeight: 'bold'
+                  }}
+                >
+                  🧪 Test API
+                </button>
+                
+                <button 
+                  onClick={() => setShowActionHistory(!showActionHistory)}
+                  className="action-btn"
+                  title="Action History"
+                >
+                  <Clock size={16} />
+                </button>
+                
+                <div className="theme-switcher">
+                  <button 
+                    onClick={toggleDarkMode}
+                    className="theme-btn"
+                  >
+                    {isDarkMode ? <Sun size={16} /> : <Moon size={16} />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Risultato test IPC */}
+            {ipcTestResult && (
+              <div style={{
+                position: 'fixed',
+                top: '60px',
+                right: '20px',
+                backgroundColor: ipcTestResult.includes('✅') ? '#4CAF50' : '#f44336',
+                color: 'white',
+                padding: '10px',
+                borderRadius: '6px',
+                fontSize: '12px',
+                maxWidth: '400px',
+                zIndex: 1000,
+                boxShadow: '0 2px 10px rgba(0,0,0,0.2)'
+              }}>
+                {ipcTestResult}
+                <button 
+                  onClick={() => setIpcTestResult('')}
+                  style={{
+                    marginLeft: '10px',
+                    background: 'transparent',
+                    border: 'none',
+                    color: 'white',
+                    cursor: 'pointer',
+                    fontSize: '16px'
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )}
+
+            {/* DA RIMUOVERE: messaggio di benvenuto fisso preimpostato */}
+            {/* Welcome Message */}
+            {/* {showWelcomeMessage && (
+              <div className="welcome-section">
+                <h1 className="welcome-title">
+                  {t.welcomeMessage.replace('{name}', currentUser?.username || 'Marco')}
+                </h1>
+              </div>
+            )} */}
+
+            {/* Chat Messages */}
+            {messages.length > 0 && (
+              <div className="messages-container">
+                <div className="messages">
+                  {messages.map(message => (
+                    <div key={message.id} className={`message ${message.isUser ? 'user' : 'ai'}`}>
+                      <div className="message-content">
+                        {message.text}
+                      </div>
+                      <div className="message-time">
+                        {formatTime(message.timestamp)}
+                      </div>
+                    </div>
+                  ))}
+                  
+                  {/* Loading Indicator */}
+                  {isNyraThinking && (
+                    <div className="message ai">
+                      <div className="message-content thinking-indicator">
+                        <span>Nyra is thinking</span>
+                        <div className="thinking-dots">
+                          <span></span>
+                          <span></span>
+                          <span></span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div ref={messagesEndRef} />
+                </div>
+              </div>
+            )}
+
+            {/* Input Area */}
+            <div className="input-section">
+              <div className="input-container">
+                <button className="input-action-btn">
+                  <Plus size={18} />
+                </button>
+                
+                <textarea
+                  ref={textareaRef}
+                  value={inputMessage}
+                  onChange={(e) => {
+                    setInputMessage(e.target.value);
+                    adjustTextareaHeight(); // AGGIUNGI questa riga
+                  }}
+                  onKeyPress={handleKeyPress}
+                  placeholder={t.messagePlaceholder}
+                  className="message-input"
+                  rows={1}
+                  style={{ resize: 'none' }} // AGGIUNGI questo stile
+                />
+                
+                <button 
+                  onClick={toggleSpeechRecognition}
+                  disabled={!isRecognitionSupported}
+                  className={`mic-btn ${isListening ? 'listening' : ''}`}
+                  title={!isRecognitionSupported ? 'Speech recognition not supported' : isListening ? 'Stop recording' : 'Start voice input'}
+                >
+                  <Mic size={18} />
+                </button>
+                
+                <button 
+                  onClick={handleSendMessage}
+                  disabled={!inputMessage.trim()}
+                  className="send-btn"
+                >
+                  <Send size={18} />
+                </button>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="quick-actions">
+                {quickActions.map((action, index) => {
+                  const Icon = action.icon;
+                  return (
+                    <button 
+                      key={index} 
+                      className="quick-action-btn"
+                      onClick={() => handleActionClick(action.text)}
+                    >
+                      <Icon size={16} />
+                      <span>{action.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* Task Memory Panel */}
+        {showActionHistory && (
+          <div className="overlay-panel action-history">
+            <div className="panel-header">
+              <h3>Action History</h3>
+              <button onClick={() => setShowActionHistory(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="panel-content">
+              {actions.length === 0 ? (
+                <div className="text-center py-8">
+                  <Clock size={32} className="mx-auto mb-4 opacity-50" />
+                  <p className="text-gray-500">No actions yet</p>
+                </div>
+              ) : (
+                actions.map(action => (
+                  <div key={action.id} className="action-item">
+                    <div className="action-info">
+                      <div className="action-description">{action.description}</div>
+                      <div className="action-conversation">
+                        Conversation: {action.conversationTitle}
+                      </div>
+                      <div className="action-time">
+                        {formatDate(action.timestamp)} at {formatTime(action.timestamp)}
+                      </div>
+                    </div>
+                    <div className="action-status completed">
+                      ✓
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Settings Panel */}
+        {showTaskMemory && (
+          <SettingsComponent 
+            onBack={() => setShowTaskMemory(false)}
+            onSubscriptionManagement={() => {}}
+            currentUser={currentUser}
+          />
+        )}
+
+        {/* Task Memory Panel - keeping original for now */}
+        {showTaskMemory && false && (
+          <div className="overlay-panel task-memory">
+            <div className="panel-header">
+              <h3>Cronologia Azioni</h3>
+              <button onClick={() => setShowTaskMemory(false)}>
+                <X size={16} />
+              </button>
+            </div>
+            <div className="panel-content">
+              {taskMemory.map((task: Task) => (
+                <div key={task.id} className="task-item">
+                  <div className="task-info">
+                    <div className="task-action">{task.action}</div>
+                    <div className="task-time">
+                      {formatDate(task.timestamp)} alle {formatTime(task.timestamp)}
+                    </div>
+                  </div>
+                  <div className={`task-status ${task.status}`}>
+                    {task.status === 'completed' ? '✓' : '✗'}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+      </div>
+
+      {/* Settings Overlay */}
+      {showSettingsOverlay && (
+        <SettingsOverlay 
+          isOpen={showSettingsOverlay}
+          onClose={() => setShowSettingsOverlay(false)}
+          language={language}
+          onLanguageChange={handleLanguageChange}
+          theme={theme}
+          onThemeChange={handleThemeChange}
+        />
+      )}
+    </div>
+  );
+}
+
+export default App;

@@ -1,0 +1,392 @@
+{
+  "name": "Nyra Voice Intent Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/nyra/voice",
+        "responseMode": "responseNode",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "id": "webhook-voice-input",
+      "name": "Webhook Voice Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "nyra-voice-webhook"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.audioUrl }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
+      },
+      "id": "download-audio",
+      "name": "Download Audio File",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "transcribe",
+        "inputType": "binary",
+        "binaryPropertyName": "data",
+        "options": {
+          "language": "it",
+          "response_format": "json",
+          "temperature": 0
+        }
+      },
+      "id": "whisper-stt",
+      "name": "Whisper STT",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Clean and normalize transcript\nconst transcript = $input.first().json.text;\n\n// Remove filler words and normalize\nfunction cleanTranscript(text) {\n  return text\n    .toLowerCase()\n    .replace(/\\b(ehm|uhm|ah|oh|mmh|beh)\\b/g, '')\n    .replace(/\\s+/g, ' ')\n    .replace(/[.,!?]+/g, '.')\n    .trim();\n}\n\nconst cleanedText = cleanTranscript(transcript);\n\nreturn {\n  originalTranscript: transcript,\n  cleanedText: cleanedText,\n  user: $input.first().json.user || {},\n  locale: $input.first().json.locale || 'it-IT',\n  tz: $input.first().json.tz || 'Europe/Rome'\n};"
+      },
+      "id": "clean-transcript",
+      "name": "Clean Transcript",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        920,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Same intent parsing logic as text flow\nconst { cleanedText: text, user, locale, tz } = $input.first().json;\n\n// Helper functions\nfunction normalizeUserContext(user) {\n  return {\n    name: user?.name || 'User',\n    email: user?.email || null,\n    timezone: tz || 'Europe/Rome',\n    locale: locale || 'it-IT'\n  };\n}\n\nfunction parseIntent(text) {\n  const normalizedText = text.toLowerCase().trim();\n  \n  // Email patterns\n  if (normalizedText.includes('email') || normalizedText.includes('mail') || \n      normalizedText.includes('scrivi') || normalizedText.includes('invia')) {\n    if (normalizedText.includes('bozza') || normalizedText.includes('draft')) {\n      return 'email_draft';\n    } else if (normalizedText.includes('invia') || normalizedText.includes('send')) {\n      return 'email_send';\n    } else if (normalizedText.includes('leggi') || normalizedText.includes('read')) {\n      return 'email_read';\n    }\n    return 'email_draft';\n  }\n  \n  // Calendar patterns\n  if (normalizedText.includes('calendario') || normalizedText.includes('appuntamento') ||\n      normalizedText.includes('evento') || normalizedText.includes('meeting') ||\n      normalizedText.includes('riunione')) {\n    if (normalizedText.includes('sposta') || normalizedText.includes('move')) {\n      return 'calendar_move';\n    } else if (normalizedText.includes('disponibile') || normalizedText.includes('libero') ||\n               normalizedText.includes('availability')) {\n      return 'calendar_availability';\n    }\n    return 'calendar_create';\n  }\n  \n  // Reminder patterns\n  if (normalizedText.includes('ricorda') || normalizedText.includes('reminder') ||\n      normalizedText.includes('promemoria')) {\n    return 'reminder_create';\n  }\n  \n  return 'unknown';\n}\n\nfunction parseItalianDates(text, timezone = 'Europe/Rome') {\n  const now = new Date();\n  const timeZoneDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));\n  \n  // Date patterns\n  const patterns = {\n    oggi: () => new Date(timeZoneDate),\n    domani: () => {\n      const date = new Date(timeZoneDate);\n      date.setDate(date.getDate() + 1);\n      return date;\n    },\n    dopodomani: () => {\n      const date = new Date(timeZoneDate);\n      date.setDate(date.getDate() + 2);\n      return date;\n    },\n    lunedì: () => getNextWeekday(1),\n    martedì: () => getNextWeekday(2),\n    mercoledì: () => getNextWeekday(3),\n    giovedì: () => getNextWeekday(4),\n    venerdì: () => getNextWeekday(5),\n    sabato: () => getNextWeekday(6),\n    domenica: () => getNextWeekday(0)\n  };\n  \n  function getNextWeekday(targetDay) {\n    const today = new Date(timeZoneDate);\n    const currentDay = today.getDay();\n    const daysUntilTarget = (targetDay - currentDay + 7) % 7;\n    const targetDate = new Date(today);\n    targetDate.setDate(today.getDate() + (daysUntilTarget === 0 ? 7 : daysUntilTarget));\n    return targetDate;\n  }\n  \n  // Time parsing\n  const timeMatch = text.match(/alle\\s*(\\d{1,2})[:\\.](\\d{2})|alle\\s*(\\d{1,2})/i);\n  let hour = 9, minute = 0;\n  \n  if (timeMatch) {\n    hour = parseInt(timeMatch[3] || timeMatch[1]);\n    minute = parseInt(timeMatch[2] || '0');\n  }\n  \n  // Find date\n  let targetDate = new Date(timeZoneDate);\n  for (const [pattern, getDate] of Object.entries(patterns)) {\n    if (text.toLowerCase().includes(pattern)) {\n      targetDate = getDate();\n      break;\n    }\n  }\n  \n  // Set time\n  targetDate.setHours(hour, minute, 0, 0);\n  \n  // End time (1 hour later by default)\n  const endDate = new Date(targetDate);\n  endDate.setHours(targetDate.getHours() + 1);\n  \n  return {\n    startISO: targetDate.toISOString(),\n    endISO: endDate.toISOString(),\n    startLocal: targetDate.toLocaleString('it-IT', { timeZone: timezone }),\n    endLocal: endDate.toLocaleString('it-IT', { timeZone: timezone })\n  };\n}\n\nfunction extractEmailParams(text) {\n  const toMatch = text.match(/a\\s+([\\w\\.-]+@[\\w\\.-]+\\.[\\w]+)/i);\n  const subjectMatch = text.match(/oggetto[:\\s]+([^,\\.]+)/i) || \n                      text.match(/subject[:\\s]+([^,\\.]+)/i);\n  \n  return {\n    to: toMatch ? toMatch[1] : null,\n    subject: subjectMatch ? subjectMatch[1].trim() : 'Messaggio vocale da Nyra',\n    body: text\n  };\n}\n\nfunction extractCalendarParams(text) {\n  const titleMatch = text.match(/evento[:\\s]+([^,\\.]+)/i) || \n                    text.match(/appuntamento[:\\s]+([^,\\.]+)/i) ||\n                    text.match(/riunione[:\\s]+([^,\\.]+)/i);\n  \n  return {\n    title: titleMatch ? titleMatch[1].trim() : 'Nuovo evento vocale da Nyra',\n    description: text,\n    location: null\n  };\n}\n\n// Main processing\nconst userContext = normalizeUserContext(user);\nconst intent = parseIntent(text);\nconst dates = parseItalianDates(text, userContext.timezone);\n\nlet params = {};\nif (intent.startsWith('email_')) {\n  params = extractEmailParams(text);\n} else if (intent.startsWith('calendar_') || intent === 'reminder_create') {\n  params = { ...extractCalendarParams(text), ...dates };\n}\n\nconst result = {\n  intent,\n  originalText: text,\n  userContext,\n  params,\n  dates,\n  timestamp: new Date().toISOString(),\n  isVoiceInput: true\n};\n\nreturn result;"
+      },
+      "id": "voice-intent-parser",
+      "name": "Voice Intent Parser",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "={{ $json.intent }}",
+                  "operation": "startsWith",
+                  "rightValue": "email_"
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "email"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "={{ $json.intent }}",
+                  "operation": "startsWith",
+                  "rightValue": "calendar_"
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "calendar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,\n                  "leftValue": "={{ $json.intent }}",
+                  "operation": "equals",
+                  "rightValue": "reminder_create"
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "reminder"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "unknown"
+        }
+      },
+      "id": "voice-switch-intent",
+      "name": "Voice Switch by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        1360,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "draft",
+        "subject": "={{ $json.params.subject }}",
+        "message": "={{ $json.params.body }}",
+        "toList": "={{ $json.params.to }}",
+        "options": {
+          "ccList": "",
+          "bccList": ""
+        }
+      },
+      "id": "voice-gmail-draft",
+      "name": "Voice Gmail Draft",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "calendarId": {
+          "__rl": true,
+          "value": "primary",
+          "mode": "list",
+          "cachedResultName": "primary"
+        },
+        "start": "={{ $json.params.startISO }}",
+        "end": "={{ $json.params.endISO }}",
+        "summary": "={{ $json.params.title }}",
+        "description": "={{ $json.params.description }}",
+        "options": {
+          "maxAttendees": 10
+        }
+      },
+      "id": "voice-calendar-create",
+      "name": "Voice Calendar Create",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 2,
+      "position": [
+        1580,
+        340
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Build reply text based on action result and intent\nconst data = $input.first().json;\nconst intent = data.intent || data.params?.intent;\n\nfunction buildReplyText(intent, result) {\n  switch (intent) {\n    case 'email_draft':\n      return `Ho creato una bozza email con oggetto \"${result.subject}\". La bozza è pronta per essere inviata.`;\n    \n    case 'email_send':\n      return `Email inviata con successo a ${result.params?.to || 'destinatario'}.`;\n    \n    case 'email_read':\n      const count = result.details?.count || 0;\n      return count > 0 \n        ? `Hai ${count} email non lette. La prima è da ${result.details?.emails[0]?.from} con oggetto \"${result.details?.emails[0]?.subject}\".`\n        : 'Non hai email non lette.';\n    \n    case 'calendar_create':\n    case 'reminder_create':\n      return `Ho creato l'evento \"${result.summary || result.details?.title}\" per ${result.details?.start || 'la data richiesta'}.`;\n    \n    case 'calendar_move':\n      return `Ho spostato l'evento \"${result.summary}\" al nuovo orario.`;\n    \n    case 'calendar_availability':\n      const isAvailable = result.details?.available;\n      return isAvailable \n        ? 'Sei libero in quel periodo.'\n        : `Hai già ${result.details?.events?.length || 0} impegni in quel periodo.`;\n    \n    default:\n      return 'Operazione completata con successo.';\n  }\n}\n\nconst replyText = buildReplyText(intent, data);\n\nreturn {\n  ...data,\n  replyText: replyText,\n  needsAudio: true\n};"
+      },
+      "id": "build-reply-text",
+      "name": "Build Reply Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        270
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "textToSpeech",
+        "text": "={{ $json.replyText }}",
+        "options": {
+          "voice": "alloy",
+          "response_format": "mp3",
+          "speed": 1
+        }
+      },
+      "id": "openai-tts",
+      "name": "OpenAI TTS",
+      "type": "n8n-nodes-base.openAi",
+      "typeVersion": 1,
+      "position": [
+        2020,
+        270
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \n  \"success\": true,\n  \"intent\": $json.intent,\n  \"message\": $json.replyText,\n  \"textResponse\": $json.replyText,\n  \"audioResponse\": {\n    \"url\": \"data:audio/mp3;base64,\" + $json.data,\n    \"type\": \"audio/mp3\"\n  },\n  \"details\": $json.details || {}\n} }}"
+      },
+      "id": "respond-voice-complete",
+      "name": "Respond Voice Complete",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        2240,
+        270
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \n  \"success\": false,\n  \"intent\": \"unknown\",\n  \"message\": \"Non ho capito la tua richiesta. Puoi ripetere?\",\n  \"textResponse\": \"Non ho capito la tua richiesta. Puoi ripetere?\",\n  \"originalTranscript\": $json.originalTranscript\n} }}"
+      },
+      "id": "respond-voice-unknown",
+      "name": "Respond Voice Unknown",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1580,
+        480
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Voice Input": {
+      "main": [
+        [
+          {
+            "node": "Download Audio File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download Audio File": {
+      "main": [
+        [
+          {
+            "node": "Whisper STT",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Whisper STT": {
+      "main": [
+        [
+          {
+            "node": "Clean Transcript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Transcript": {
+      "main": [
+        [
+          {
+            "node": "Voice Intent Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Intent Parser": {
+      "main": [
+        [
+          {
+            "node": "Voice Switch by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Switch by Intent": {
+      "main": [
+        [
+          {
+            "node": "Voice Gmail Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Voice Calendar Create",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Voice Calendar Create",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Voice Unknown",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Gmail Draft": {
+      "main": [
+        [
+          {
+            "node": "Build Reply Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Calendar Create": {
+      "main": [
+        [
+          {
+            "node": "Build Reply Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Reply Text": {
+      "main": [
+        [
+          {
+            "node": "OpenAI TTS",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI TTS": {
+      "main": [
+        [
+          {
+            "node": "Respond Voice Complete",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+}

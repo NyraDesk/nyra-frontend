@@ -1,0 +1,474 @@
+{
+  "name": "Nyra Text Intent Processing",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "/nyra/text",
+        "responseMode": "responseNode",
+        "options": {
+          "noResponseBody": false
+        }
+      },
+      "id": "webhook-text-input",
+      "name": "Webhook Text Input",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "nyra-text-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Normalize input and parse intent\nconst { text, user, locale, tz } = $input.first().json;\n\n// Helper functions\nfunction normalizeUserContext(user) {\n  return {\n    name: user?.name || 'User',\n    email: user?.email || null,\n    timezone: tz || 'Europe/Rome',\n    locale: locale || 'it-IT'\n  };\n}\n\nfunction parseIntent(text) {\n  const normalizedText = text.toLowerCase().trim();\n  \n  // Email patterns\n  if (normalizedText.includes('email') || normalizedText.includes('mail') || \n      normalizedText.includes('scrivi') || normalizedText.includes('invia')) {\n    if (normalizedText.includes('bozza') || normalizedText.includes('draft')) {\n      return 'email_draft';\n    } else if (normalizedText.includes('invia') || normalizedText.includes('send')) {\n      return 'email_send';\n    } else if (normalizedText.includes('leggi') || normalizedText.includes('read')) {\n      return 'email_read';\n    }\n    return 'email_draft';\n  }\n  \n  // Calendar patterns\n  if (normalizedText.includes('calendario') || normalizedText.includes('appuntamento') ||\n      normalizedText.includes('evento') || normalizedText.includes('meeting') ||\n      normalizedText.includes('riunione')) {\n    if (normalizedText.includes('sposta') || normalizedText.includes('move')) {\n      return 'calendar_move';\n    } else if (normalizedText.includes('disponibile') || normalizedText.includes('libero') ||\n               normalizedText.includes('availability')) {\n      return 'calendar_availability';\n    }\n    return 'calendar_create';\n  }\n  \n  // Reminder patterns\n  if (normalizedText.includes('ricorda') || normalizedText.includes('reminder') ||\n      normalizedText.includes('promemoria')) {\n    return 'reminder_create';\n  }\n  \n  return 'unknown';\n}\n\nfunction parseItalianDates(text, timezone = 'Europe/Rome') {\n  const now = new Date();\n  const timeZoneDate = new Date(now.toLocaleString('en-US', { timeZone: timezone }));\n  \n  // Date patterns\n  const patterns = {\n    oggi: () => new Date(timeZoneDate),\n    domani: () => {\n      const date = new Date(timeZoneDate);\n      date.setDate(date.getDate() + 1);\n      return date;\n    },\n    dopodomani: () => {\n      const date = new Date(timeZoneDate);\n      date.setDate(date.getDate() + 2);\n      return date;\n    },\n    lunedì: () => getNextWeekday(1),\n    martedì: () => getNextWeekday(2),\n    mercoledì: () => getNextWeekday(3),\n    giovedì: () => getNextWeekday(4),\n    venerdì: () => getNextWeekday(5),\n    sabato: () => getNextWeekday(6),\n    domenica: () => getNextWeekday(0)\n  };\n  \n  function getNextWeekday(targetDay) {\n    const today = new Date(timeZoneDate);\n    const currentDay = today.getDay();\n    const daysUntilTarget = (targetDay - currentDay + 7) % 7;\n    const targetDate = new Date(today);\n    targetDate.setDate(today.getDate() + (daysUntilTarget === 0 ? 7 : daysUntilTarget));\n    return targetDate;\n  }\n  \n  // Time parsing\n  const timeMatch = text.match(/alle\\s*(\\d{1,2})[:\\.](\\d{2})|alle\\s*(\\d{1,2})/i);\n  let hour = 9, minute = 0;\n  \n  if (timeMatch) {\n    hour = parseInt(timeMatch[3] || timeMatch[1]);\n    minute = parseInt(timeMatch[2] || '0');\n  }\n  \n  // Find date\n  let targetDate = new Date(timeZoneDate);\n  for (const [pattern, getDate] of Object.entries(patterns)) {\n    if (text.toLowerCase().includes(pattern)) {\n      targetDate = getDate();\n      break;\n    }\n  }\n  \n  // Set time\n  targetDate.setHours(hour, minute, 0, 0);\n  \n  // End time (1 hour later by default)\n  const endDate = new Date(targetDate);\n  endDate.setHours(targetDate.getHours() + 1);\n  \n  return {\n    startISO: targetDate.toISOString(),\n    endISO: endDate.toISOString(),\n    startLocal: targetDate.toLocaleString('it-IT', { timeZone: timezone }),\n    endLocal: endDate.toLocaleString('it-IT', { timeZone: timezone })\n  };\n}\n\nfunction extractEmailParams(text) {\n  const toMatch = text.match(/a\\s+([\\w\\.-]+@[\\w\\.-]+\\.[\\w]+)/i);\n  const subjectMatch = text.match(/oggetto[:\\s]+([^,\\.]+)/i) || \n                      text.match(/subject[:\\s]+([^,\\.]+)/i);\n  \n  return {\n    to: toMatch ? toMatch[1] : null,\n    subject: subjectMatch ? subjectMatch[1].trim() : 'Messaggio da Nyra',\n    body: text\n  };\n}\n\nfunction extractCalendarParams(text) {\n  const titleMatch = text.match(/evento[:\\s]+([^,\\.]+)/i) || \n                    text.match(/appuntamento[:\\s]+([^,\\.]+)/i) ||\n                    text.match(/riunione[:\\s]+([^,\\.]+)/i);\n  \n  return {\n    title: titleMatch ? titleMatch[1].trim() : 'Nuovo evento da Nyra',\n    description: text,\n    location: null\n  };\n}\n\n// Main processing\nconst userContext = normalizeUserContext(user);\nconst intent = parseIntent(text);\nconst dates = parseItalianDates(text, userContext.timezone);\n\nlet params = {};\nif (intent.startsWith('email_')) {\n  params = extractEmailParams(text);\n} else if (intent.startsWith('calendar_') || intent === 'reminder_create') {\n  params = { ...extractCalendarParams(text), ...dates };\n}\n\nconst result = {\n  intent,\n  originalText: text,\n  userContext,\n  params,\n  dates,\n  timestamp: new Date().toISOString()\n};\n\nreturn result;"
+      },
+      "id": "code-intent-parser",
+      "name": "Intent Parser",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        480,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "={{ $json.intent }}",
+                  "operation": "startsWith",
+                  "rightValue": "email_"
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "email"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "={{ $json.intent }}",
+                  "operation": "startsWith",
+                  "rightValue": "calendar_"
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "calendar"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "={{ $json.intent }}",
+                  "operation": "equals",
+                  "rightValue": "reminder_create"
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "reminder"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "unknown"
+        }
+      },
+      "id": "switch-intent",
+      "name": "Switch by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [
+        700,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "draft",
+        "subject": "={{ $json.params.subject }}",
+        "message": "={{ $json.params.body }}",
+        "toList": "={{ $json.params.to }}",
+        "options": {
+          "ccList": "",
+          "bccList": ""
+        }
+      },
+      "id": "gmail-draft",
+      "name": "Gmail Create Draft",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        920,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "subject": "={{ $json.params.subject }}",
+        "message": "={{ $json.params.body }}",
+        "toList": "={{ $json.params.to }}",
+        "options": {
+          "ccList": "",
+          "bccList": ""
+        }
+      },
+      "id": "gmail-send",
+      "name": "Gmail Send",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        920,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "limit": 10,
+        "options": {
+          "q": "is:unread"
+        }
+      },
+      "id": "gmail-read",
+      "name": "Gmail Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2,
+      "position": [
+        920,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "calendarId": {
+          "__rl": true,
+          "value": "primary",
+          "mode": "list",
+          "cachedResultName": "primary"
+        },
+        "start": "={{ $json.params.startISO }}",
+        "end": "={{ $json.params.endISO }}",
+        "summary": "={{ $json.params.title }}",
+        "description": "={{ $json.params.description }}",
+        "options": {
+          "maxAttendees": 10
+        }
+      },
+      "id": "calendar-create",
+      "name": "Calendar Create Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 2,
+      "position": [
+        920,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "calendarId": {
+          "__rl": true,
+          "value": "primary",
+          "mode": "list",
+          "cachedResultName": "primary"
+        },
+        "eventId": "={{ $json.params.eventId }}",
+        "start": "={{ $json.params.startISO }}",
+        "end": "={{ $json.params.endISO }}",
+        "options": {
+          "maxAttendees": 10
+        }
+      },
+      "id": "calendar-move",
+      "name": "Calendar Move Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 2,
+      "position": [
+        920,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendarId": {
+          "__rl": true,
+          "value": "primary",
+          "mode": "list",
+          "cachedResultName": "primary"
+        },
+        "start": "={{ $json.params.startISO }}",
+        "end": "={{ $json.params.endISO }}",
+        "options": {
+          "singleEvents": true,
+          "orderBy": "startTime"
+        }
+      },
+      "id": "calendar-availability",
+      "name": "Calendar Check Availability",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 2,
+      "position": [
+        920,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \n  \"success\": true,\n  \"intent\": $json.intent,\n  \"message\": \"Email draft created successfully\",\n  \"details\": {\n    \"draftId\": $json.id,\n    \"subject\": $json.subject,\n    \"to\": $json.params?.to\n  }\n} }}"
+      },
+      "id": "respond-email-draft",
+      "name": "Respond Email Draft",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \n  \"success\": true,\n  \"intent\": $json.intent,\n  \"message\": \"Email sent successfully\",\n  \"details\": {\n    \"messageId\": $json.id,\n    \"subject\": $json.subject,\n    \"to\": $json.params?.to\n  }\n} }}"
+      },
+      "id": "respond-email-send",
+      "name": "Respond Email Send",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        280
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \n  \"success\": true,\n  \"intent\": $json.intent,\n  \"message\": \"Emails retrieved successfully\",\n  \"details\": {\n    \"count\": $json.length,\n    \"emails\": $json.map(email => ({\n      \"subject\": email.subject,\n      \"from\": email.from?.name || email.from?.email,\n      \"snippet\": email.snippet\n    }))\n  }\n} }}"
+      },
+      "id": "respond-email-read",
+      "name": "Respond Email Read",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \n  \"success\": true,\n  \"intent\": $json.intent,\n  \"message\": \"Calendar event created successfully\",\n  \"details\": {\n    \"eventId\": $json.id,\n    \"title\": $json.summary,\n    \"start\": $json.start?.dateTime,\n    \"end\": $json.end?.dateTime,\n    \"htmlLink\": $json.htmlLink\n  }\n} }}"
+      },
+      "id": "respond-calendar-create",
+      "name": "Respond Calendar Create",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        440
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \n  \"success\": true,\n  \"intent\": $json.intent,\n  \"message\": \"Calendar event moved successfully\",\n  \"details\": {\n    \"eventId\": $json.id,\n    \"title\": $json.summary,\n    \"start\": $json.start?.dateTime,\n    \"end\": $json.end?.dateTime\n  }\n} }}"
+      },
+      "id": "respond-calendar-move",
+      "name": "Respond Calendar Move",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        520
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \n  \"success\": true,\n  \"intent\": $json.intent,\n  \"message\": \"Availability checked successfully\",\n  \"details\": {\n    \"period\": {\n      \"start\": $json.params?.startISO,\n      \"end\": $json.params?.endISO\n    },\n    \"events\": $json.map(event => ({\n      \"title\": event.summary,\n      \"start\": event.start?.dateTime,\n      \"end\": event.end?.dateTime\n    })),\n    \"available\": $json.length === 0\n  }\n} }}"
+      },
+      "id": "respond-calendar-availability",
+      "name": "Respond Availability",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        1140,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { \n  \"success\": false,\n  \"intent\": \"unknown\",\n  \"message\": \"Intent not recognized. Please try rephrasing your request.\",\n  \"originalText\": $json.originalText\n} }}"
+      },
+      "id": "respond-unknown",
+      "name": "Respond Unknown Intent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        920,
+        680
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Text Input": {
+      "main": [
+        [
+          {
+            "node": "Intent Parser",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intent Parser": {
+      "main": [
+        [
+          {
+            "node": "Switch by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch by Intent": {
+      "main": [
+        [
+          {
+            "node": "Gmail Create Draft",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail Send",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Gmail Read",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calendar Create Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calendar Move Event",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Calendar Check Availability",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Calendar Create Event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Unknown Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Create Draft": {
+      "main": [
+        [
+          {
+            "node": "Respond Email Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Send": {
+      "main": [
+        [
+          {
+            "node": "Respond Email Send",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Read": {
+      "main": [
+        [
+          {
+            "node": "Respond Email Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Create Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Calendar Create",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Move Event": {
+      "main": [
+        [
+          {
+            "node": "Respond Calendar Move",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calendar Check Availability": {
+      "main": [
+        [
+          {
+            "node": "Respond Availability",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 1,
+  "updatedAt": "2024-01-15T10:00:00.000Z",
+  "versionId": "1"
+}

@@ -1,0 +1,38 @@
+# Render.com configuration file
+services:
+  - type: web
+    name: nyra-backend
+    env: node
+    plan: starter  # Free tier
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: OPENROUTER_API_KEY
+        sync: false  # Set manually in Render dashboard
+      - key: OPENROUTER_REFERER
+        value: https://nyra-backend.onrender.com
+      - key: OPENROUTER_TITLE
+        value: NYRA Backend Production
+      - key: GOOGLE_CLIENT_ID
+        sync: false  # Set manually in Render dashboard
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false  # Set manually in Render dashboard
+      - key: GOOGLE_REDIRECT_URI
+        value: https://nyra-backend.onrender.com/api/auth/google/callback
+      - key: JWT_SECRET
+        sync: false  # Set manually in Render dashboard
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: CORS_ORIGIN
+        value: https://nyra-frontend.vercel.app
+      - key: GMAIL_SCOPES
+        value: https://www.googleapis.com/auth/gmail.send,https://www.googleapis.com/auth/gmail.compose,https://www.googleapis.com/auth/gmail.readonly
+      - key: MAX_FILE_SIZE
+        value: 10485760
+      - key: UPLOAD_PATH
+        value: ./uploads
