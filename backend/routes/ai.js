@@ -3,6 +3,16 @@ const openrouterService = require('../services/openrouter');
 
 const router = express.Router();
 
+// Health check endpoint
+router.get('/health', (req, res) => {
+  res.json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    version: '1.0.0',
+    service: 'NYRA Backend'
+  });
+});
+
 // POST /api/ai/chat - Chat with OpenRouter
 router.post('/chat', async (req, res) => {
   try {
