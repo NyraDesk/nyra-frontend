@@ -1,4 +1,5 @@
 import * as XLSX from 'xlsx';
+import { EXTERNAL_APIS } from '../config/external-apis';
 
 export class ExcelService {
   // Helper per estrarre valori numerici da celle
@@ -206,7 +207,7 @@ export class ExcelService {
         Adatta sempre la struttura al contesto della richiesta.
       `;
       
-      const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      const response = await fetch(EXTERNAL_APIS.OPENROUTER.BASE_URL, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
@@ -286,7 +287,7 @@ export class ExcelService {
           - "location 1500" = quantita: 1, prezzo: 1500
         `;
         
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const response = await fetch(EXTERNAL_APIS.OPENROUTER.BASE_URL, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,

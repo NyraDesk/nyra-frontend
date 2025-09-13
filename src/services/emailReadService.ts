@@ -1,4 +1,5 @@
 import { GmailFetchService } from './gmailFetchService';
+import { API_URL } from '../config/api';
 
 export interface EmailReadAction {
   action: 'read-email';
@@ -78,7 +79,7 @@ export class EmailReadService {
           };
         }
         
-        const brokerUrl = `${import.meta.env.VITE_BROKER_URL || 'http://localhost:3001'}/auth/google/status?user_id=${encodeURIComponent(userId)}`;
+        const brokerUrl = `${import.meta.env.VITE_BROKER_URL || API_URL}/auth/google/status?user_id=${encodeURIComponent(userId)}`;
         const response = await fetch(brokerUrl, { credentials: 'include' });
         
         if (!response.ok) {

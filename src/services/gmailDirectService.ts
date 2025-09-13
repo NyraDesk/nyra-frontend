@@ -1,3 +1,5 @@
+import { getGmailUrl } from '../config/external-apis';
+
 export const gmailDirectService = {
   async sendEmail(emailData: any) {
     // Recupera il token OAuth di Gmail
@@ -31,7 +33,7 @@ export const gmailDirectService = {
 
     // Invia tramite Gmail API
     const response = await fetch(
-      'https://gmail.googleapis.com/gmail/v1/users/me/messages/send',
+      getGmailUrl('/users/me/messages/send'),
       {
         method: 'POST',
         headers: {

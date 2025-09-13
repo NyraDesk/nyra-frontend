@@ -1,5 +1,6 @@
 // @ts-nocheck
 import React, { useState, useEffect } from 'react';
+import { API_URL } from '../config/api';
 import { ArrowLeft, CreditCard, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { GmailChecker } from './GmailChecker';
 
@@ -25,7 +26,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, onSubscriptionManagement, 
   const [aiModel, setAiModel] = useState('gpt');
 
   // Broker HTTP configuration
-  const BROKER = (import.meta as any).env?.VITE_BROKER_URL || 'http://localhost:3001';
+  const BROKER = (import.meta as any).env?.VITE_BROKER_URL || API_URL;
   
   // Current user id - ENFORCE email only for OAuth (unique and persistent identifier)
   const userId = currentUser?.email;

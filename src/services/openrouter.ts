@@ -10,15 +10,17 @@ interface UserData {
   timestamp: string;
 }
 
+import { EXTERNAL_APIS } from '../config/external-apis';
+
 export class OpenRouterConnector {
-  private baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
-  private apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+  private baseUrl = EXTERNAL_APIS.OPENROUTER.BASE_URL;
+  private apiKey = EXTERNAL_APIS.OPENROUTER.API_KEY;
   
   private headers = {
     'Authorization': `Bearer ${this.apiKey}`,
     'Content-Type': 'application/json',
-    'HTTP-Referer': import.meta.env.VITE_OPENROUTER_REFERER || 'http://localhost',
-    'X-Title': import.meta.env.VITE_OPENROUTER_TITLE || 'Nyra Dev'
+    'HTTP-Referer': EXTERNAL_APIS.OPENROUTER.REFERER,
+    'X-Title': EXTERNAL_APIS.OPENROUTER.TITLE
   };
 
   async getResponse(

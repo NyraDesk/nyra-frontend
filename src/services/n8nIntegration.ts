@@ -56,7 +56,7 @@ export async function createReminder(message: string, userId?: string, userName?
 
   // Log della richiesta
   if (NYRA_DEBUG_N8N) {
-    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL || "http://localhost:5678/webhook/nyra/text";
+    const webhookUrl = getN8NWebhookUrl();
     console.log('[NYRA] Creating reminder via n8n:', webhookUrl);
     console.log('[NYRA] Payload:', payload);
   }
@@ -106,7 +106,7 @@ export async function createReminder(message: string, userId?: string, userName?
 
   // 2) Fallback fetch (richiede CORS lato n8n)
   try {
-    import.meta.env.VITE_N8N_WEBHOOK_URL || "http://localhost:5678/webhook/nyra/text"
+    getN8NWebhookUrl()
     console.log("[NYRA][REQUEST URL]", webhookUrl);
     
     // Validazione JSON prima della chiamata
@@ -183,7 +183,7 @@ export async function createReminder(message: string, userId?: string, userName?
         if (NYRA_DEBUG_N8N) {
           console.log('[NYRA] Fallback via IPC main process');
         }
-        const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL || "http://localhost:5678/webhook/nyra/text";
+        const webhookUrl = getN8NWebhookUrl();
         const res = await viaIpc({ summary: payload.summary, startISO: payload.startISO, endISO: payload.endISO }, webhookUrl);
         if (res.ok && res.data?.ok) {
           if (NYRA_DEBUG_N8N) {
@@ -432,7 +432,7 @@ export async function createCalendarEvent(action: any): Promise<CalendarResponse
 
   // 2) Fallback fetch (richiede CORS lato n8n)
   try {
-    const webhookUrl = import.meta.env.VITE_N8N_WEBHOOK_URL || "http://localhost:5678/webhook/nyra/text";
+    const webhookUrl = getN8NWebhookUrl();
     console.log("[NYRA][REQUEST URL]", webhookUrl);
     
     // Validazione JSON prima della chiamata

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { EXTERNAL_APIS } from './config/external-apis';
 
 // Estendi l'interfaccia Window per le proprietà personalizzate
 declare global {
@@ -2720,7 +2721,7 @@ ${(() => {
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
                 // CHIAMATA REALE A OPENROUTER
-                const openRouterResponse = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                const openRouterResponse = await fetch(EXTERNAL_APIS.OPENROUTER.BASE_URL, {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${apiKey}`,

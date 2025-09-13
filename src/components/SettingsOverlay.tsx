@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Settings as SettingsIcon } from 'lucide-react';
+import { API_URL } from '../config/api';
 
 interface SettingsOverlayProps {
   isOpen: boolean;
@@ -19,7 +20,7 @@ export default function SettingsOverlay({ isOpen, onClose, language, onLanguageC
   const [showPlanDetails, setShowPlanDetails] = useState(false);
 
   // OAuth Broker configuration
-  const BROKER = (import.meta as any).env?.VITE_BROKER_URL || "http://localhost:3001";
+  const BROKER = (import.meta as any).env?.VITE_BROKER_URL || API_URL;
 
   // Google Integrations Section Component
   function GoogleIntegrationsSection({ userId }: { userId: string }) {

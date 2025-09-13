@@ -1,3 +1,5 @@
+import { getGmailUrl } from '../config/external-apis';
+
 export class GmailFetchService {
   private accessToken: string;
   
@@ -11,7 +13,7 @@ export class GmailFetchService {
 
   async getMessagesWithQuery(maxResults = 10, query = '') {
     try {
-      const url = new URL('https://gmail.googleapis.com/gmail/v1/users/me/messages');
+      const url = new URL(getGmailUrl('/users/me/messages'));
       url.searchParams.set('maxResults', maxResults.toString());
       
       if (query) {
@@ -38,7 +40,7 @@ export class GmailFetchService {
 
   async getMessage(messageId: string) {
     const response = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${messageId}?format=full`,
+      `${getGmailUrl('/users/me/messages')}/${messageId}?format=full`,
       {
         headers: {
           'Authorization': `Bearer ${this.accessToken}`

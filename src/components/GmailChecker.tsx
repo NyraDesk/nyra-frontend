@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { GmailFetchService } from '../services/gmailFetchService';
 
+import { API_URL } from '../config/api';
+
 // Configurazione broker (stesso metodo di Settings.tsx)
-const BROKER = (import.meta as any).env?.VITE_BROKER_URL || 'http://localhost:3001';
+const BROKER = (import.meta as any).env?.VITE_BROKER_URL || API_URL;
 
 interface Email {
   id: string;
