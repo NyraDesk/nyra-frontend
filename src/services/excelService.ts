@@ -207,12 +207,10 @@ export class ExcelService {
         Adatta sempre la struttura al contesto della richiesta.
       `;
       
-      const response = await fetch(EXTERNAL_APIS.OPENROUTER.BASE_URL, {
+      const response = await fetch(`${API_URL}/api/ai/chat`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
           'Content-Type': 'application/json',
-          'HTTP-Referer': window.location.href,
           'X-Title': 'NYRA'
         },
         body: JSON.stringify({
@@ -287,12 +285,10 @@ export class ExcelService {
           - "location 1500" = quantita: 1, prezzo: 1500
         `;
         
-        const response = await fetch(EXTERNAL_APIS.OPENROUTER.BASE_URL, {
+        const response = await fetch(`${API_URL}/api/ai/chat`, {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': window.location.href,
             'X-Title': 'NYRA'
           },
           body: JSON.stringify({

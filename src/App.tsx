@@ -2644,8 +2644,8 @@ Concentrati su AZIONI PRATICHE che l'utente può fare subito.
 TERMINA sempre con una domanda diretta su cosa fare.
               `;
               
-              // Verifica se la chiave API è presente
-              const apiKey = import.meta.env.VITE_OPENROUTER_API_KEY;
+              // Verifica se il backend è disponibile
+              const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://nyra-backend-c7zi.onrender.com';
               
               // La tab dinamica sarà mostrata dentro la chat
               
@@ -2720,13 +2720,10 @@ ${(() => {
                 // DELAY per far vedere i dati
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
-                // CHIAMATA REALE A OPENROUTER
-                const openRouterResponse = await fetch(EXTERNAL_APIS.OPENROUTER.BASE_URL, {
+                // CHIAMATA REALE AL BACKEND
+                const openRouterResponse = await fetch(`${backendUrl}/api/ai/chat`, {
                   method: 'POST',
                   headers: {
-                    'Authorization': `Bearer ${apiKey}`,
-                    'HTTP-Referer': window.location.origin,
-                    'X-Title': 'NYRA Excel Analysis',
                     'Content-Type': 'application/json'
                   },
                   body: JSON.stringify({

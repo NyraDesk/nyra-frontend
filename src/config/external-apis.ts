@@ -1,12 +1,5 @@
 // Configurazione per API esterne
 export const EXTERNAL_APIS = {
-  // OpenRouter AI
-  OPENROUTER: {
-    BASE_URL: 'https://openrouter.ai/api/v1/chat/completions',
-    API_KEY: import.meta.env.VITE_OPENROUTER_API_KEY,
-    REFERER: import.meta.env.VITE_OPENROUTER_REFERER || 'http://localhost:5173',
-    TITLE: import.meta.env.VITE_OPENROUTER_TITLE || 'NYRA'
-  },
   
   // Gmail API
   GMAIL: {
