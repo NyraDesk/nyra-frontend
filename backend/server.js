@@ -20,9 +20,14 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors({
   origin: [
-    process.env.CORS_ORIGIN || 'http://localhost:5173',
-    'https://nyra-frontend.vercel.app', // Frontend Vercel URL
-    'https://nyra-app.vercel.app'        // Alternative Vercel URL
+    'http://localhost:5173',
+    'http://localhost:5174',
+    'https://nyra-frontend-r1dqdnyen-nyradesk-projects.vercel.app',
+    'https://nyra-frontend-beta.vercel.app',
+    'https://nyra-frontend-git-main-nyradesk-projects.vercel.app',
+    'https://nyra-frontend.vercel.app',
+    'https://nyra-app.vercel.app',
+    process.env.CORS_ORIGIN || 'http://localhost:5173'
   ],
   credentials: true
 }));
