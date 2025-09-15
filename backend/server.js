@@ -8,6 +8,7 @@ dotenv.config();
 
 // Import routes
 const authRoutes = require('./routes/auth');
+const authOAuthRoutes = require('./routes/authRoutes');
 const emailRoutes = require('./routes/email');
 const aiRoutes = require('./routes/ai');
 
@@ -54,6 +55,7 @@ app.get('/health', (req, res) => {
 
 // API Routes
 app.use('/api/auth', authRoutes);
+app.use('/auth', authOAuthRoutes);  // Google OAuth routes
 app.use('/api/email', authMiddleware.optional, emailRoutes);
 app.use('/api/ai', authMiddleware.optional, aiRoutes);
 
@@ -87,6 +89,9 @@ app.listen(PORT, '0.0.0.0', () => {
   // Log available routes
   console.log('\n📋 Available API Routes:');
   console.log('  GET  /health - Health check');
+  console.log('  GET  /auth/google/start - Start Google OAuth');
+  console.log('  GET  /auth/google/callback - Google OAuth callback');
+  console.log('  GET  /auth/google/status - Check auth status');
   console.log('  POST /api/auth/google - Google OAuth login');
   console.log('  GET  /api/auth/verify - Verify JWT token');
   console.log('  POST /api/email/generate - Generate email with AI');
