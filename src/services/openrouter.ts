@@ -10,17 +10,12 @@ interface UserData {
   timestamp: string;
 }
 
-import { EXTERNAL_APIS } from '../config/external-apis';
 
 export class OpenRouterConnector {
-  private baseUrl = EXTERNAL_APIS.OPENROUTER.BASE_URL;
-  private apiKey = EXTERNAL_APIS.OPENROUTER.API_KEY;
+  private baseUrl = 'https://nyra-backend-c7zi.onrender.com/api/ai/chat';
   
   private headers = {
-    'Authorization': `Bearer ${this.apiKey}`,
-    'Content-Type': 'application/json',
-    'HTTP-Referer': EXTERNAL_APIS.OPENROUTER.REFERER,
-    'X-Title': EXTERNAL_APIS.OPENROUTER.TITLE
+    'Content-Type': 'application/json'
   };
 
   async getResponse(
@@ -40,7 +35,12 @@ export class OpenRouterConnector {
       const response = await fetch(this.baseUrl, {
         method: 'POST',
         headers: this.headers,
-        body: JSON.stringify({ messages, model })
+        body: JSON.stringify({ 
+          messages, 
+          model,
+          temperature: 0.7,
+          max_tokens: 4000
+        })
       });
 
       const responseText = await response.text();
@@ -57,11 +57,11 @@ export class OpenRouterConnector {
       // Prova a parsare JSON
       try {
         const data = JSON.parse(responseText);
-        console.log('✅ OpenRouter JSON parsed successfully');
-        return data.choices?.[0]?.message?.content || '';
+        console.log('✅ Backend JSON parsed successfully');
+        return data.response || data.choices?.[0]?.message?.content || '';
       } catch (parseError) {
-        console.error('❌ Failed to parse OpenRouter response:', responseText);
-        throw new Error('Invalid JSON response from OpenRouter');
+        console.error('❌ Failed to parse Backend response:', responseText);
+        throw new Error('Invalid JSON response from Backend');
       }
     } catch (error) {
       console.error('❌ OpenRouter error:', error);
@@ -81,15 +81,14 @@ export class OpenRouterConnector {
         console.log('OpenRouter: Pre-validation started');
       }
       
-      // 1. Valida API Key
-      if (!this.apiKey) {
-        throw new Error('❌ API Key mancante: VITE_OPENROUTER_API_KEY non configurata');
+      // 1. Valida Backend URL
+      if (!this.baseUrl) {
+        throw new Error('❌ Backend URL mancante: VITE_BACKEND_URL non configurata');
       }
       
-      // 2. Valida Authorization header
-      const authHeader = this.headers.Authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        throw new Error('❌ Authorization header malformato: deve iniziare con "Bearer "');
+      // 2. Valida Backend URL
+      if (!this.baseUrl || !this.baseUrl.startsWith('https://')) {
+        throw new Error('❌ Backend URL non valido');
       }
       
       if (process.env.NODE_ENV === 'development') {
@@ -193,12 +192,17 @@ export class OpenRouterConnector {
       const response = await fetch(this.baseUrl, {
         method: 'POST',
         headers: this.headers,
-        body: JSON.stringify(requestBody)
+        body: JSON.stringify({
+          messages: contextMessages,
+          model,
+          temperature: 0.7,
+          max_tokens: 1000
+        })
       });
 
       // GESTIONE ERRORI DETTAGLIATA
       if (!response.ok) {
-        let errorMessage = `❌ OpenRouter API Error ${response.status}: ${response.statusText}`;
+        let errorMessage = `❌ Backend API Error ${response.status}: ${response.statusText}`;
         
         try {
           // Prova a leggere il body della risposta per dettagli
@@ -224,13 +228,9 @@ export class OpenRouterConnector {
       const data = await response.json();
       
       // Valida risposta
-      if (!data.choices || !Array.isArray(data.choices) || data.choices.length === 0) {
-        throw new Error('❌ Risposta API malformata: choices array mancante o vuoto');
-      }
-      
-      const content = data.choices[0]?.message?.content;
+      const content = data.response || data.choices?.[0]?.message?.content;
       if (!content) {
-        throw new Error('❌ Risposta API malformata: content mancante nel primo choice');
+        throw new Error('❌ Risposta Backend malformata: content mancante');
       }
       
       if (process.env.NODE_ENV === 'development') {
@@ -666,20 +666,14 @@ Se mancano informazioni essenziali, chiedi con UNA domanda in italiano, poi rest
   validateConfiguration(): { isValid: boolean; errors: string[] } {
     const errors: string[] = [];
     
-    // Valida API Key
-    if (!this.apiKey) {
-      errors.push('API Key mancante: VITE_OPENROUTER_API_KEY non configurata');
-    }
-    
-    // Valida Authorization header
-    const authHeader = this.headers.Authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      errors.push('Authorization header malformato');
+    // Valida Backend URL
+    if (!this.baseUrl) {
+      errors.push('Backend URL mancante: VITE_BACKEND_URL non configurata');
     }
     
     // Valida base URL
     if (!this.baseUrl || !this.baseUrl.startsWith('https://')) {
-      errors.push('Base URL non valido');
+      errors.push('Backend URL non valido');
     }
     
     return {

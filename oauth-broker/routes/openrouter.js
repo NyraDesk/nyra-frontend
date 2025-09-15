@@ -63,7 +63,7 @@ router.post('/api/openrouter', async (req, res) => {
     // Chiamata sicura a OpenRouter
     console.log('[OpenRouter] Chiamata a OpenRouter API...');
     
-    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    const response = await fetch('https://nyra-backend-c7zi.onrender.com/api/ai/chat', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${apiKey}`,

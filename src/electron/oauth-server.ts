@@ -327,7 +327,7 @@ class OAuthServer {
     // API proxy per OpenRouter (protegge la chiave API)
     this.app.post('/api/openrouter', async (req: Request, res: Response) => {
       try {
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+        const response = await fetch('https://nyra-backend-c7zi.onrender.com/api/ai/chat', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,

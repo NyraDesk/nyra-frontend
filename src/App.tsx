@@ -2651,7 +2651,7 @@ TERMINA sempre con una domanda diretta su cosa fare.
               
               let aiAnalysis: string;
               
-              if (apiKey) {
+              if (backendUrl) {
                 // Mostra rettangolo dinamico che si aggiorna durante l'analisi
                 // STEP 1: Solo nome file
                 const fileDataMessage: Message = {

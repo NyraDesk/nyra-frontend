@@ -2,7 +2,7 @@ const fetch = require('node-fetch');
 
 class OpenRouterConnector {
   constructor() {
-    this.baseUrl = 'https://openrouter.ai/api/v1/chat/completions';
+    this.baseUrl = 'https://nyra-backend-c7zi.onrender.com/api/ai/chat';
     this.apiKey = process.env.OPENROUTER_API_KEY;
     
     this.headers = {

@@ -4,7 +4,7 @@ class OpenRouterService {
   constructor() {
     // Prende la key dal .env, MAI esposta al frontend
     this.apiKey = process.env.OPENROUTER_API_KEY;
-    this.baseUrl = 'https://openrouter.ai/api/v1';
+    this.baseUrl = 'https://nyra-backend-c7zi.onrender.com/api/ai';
   }
 
   async chat(messages, options = {}) {
