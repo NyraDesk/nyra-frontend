@@ -1,5 +1,5 @@
 // Configurazione centralizzata per API Backend
-export const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001';
+export const API_URL = import.meta.env.VITE_BACKEND_URL || 'https://nyra-backend-c7zi.onrender.com';
 
 // Endpoints API
 export const API_ENDPOINTS = {
