@@ -65,7 +65,7 @@ class OAuthServer {
     this.oauth2Client = new google.auth.OAuth2(
       process.env.GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      process.env.GOOGLE_REDIRECT_URI || 'http://localhost:3001/auth/google/callback'
+      process.env.GOOGLE_REDIRECT_URI || 'https://nyra-backend-c7zi.onrender.com/auth/google/callback'
     );
   }
 
@@ -332,7 +332,7 @@ class OAuthServer {
           headers: {
             'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
             'Content-Type': 'application/json',
-            'HTTP-Referer': 'http://localhost:3001',
+            'HTTP-Referer': 'https://nyra-backend-c7zi.onrender.com',
             'X-Title': 'NYRA'
           },
           body: JSON.stringify(req.body)
