@@ -8,7 +8,7 @@ dotenv.config();
 
 // Import routes
 const authRoutes = require('./routes/auth');
-const authOAuthRoutes = require('./routes/authRoutes');
+const authOAuthRoutes = require('./routes/authOAuthRoutes');
 const emailRoutes = require('./routes/email');
 const aiRoutes = require('./routes/ai');
 
