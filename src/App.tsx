@@ -2513,7 +2513,7 @@ Rispondi con:
           window.tempExcelFile = file;
           
           setInputMessage('');
-          setUploadedFiles([]); // Nasconde il file dall'input ma lo mantiene in window.tempExcelFile
+          // setUploadedFiles([]); // DISABILITATO - Fix per mantenere file disponibile
           return;
         }
         
@@ -2530,6 +2530,8 @@ Rispondi con:
             try {
               // Parse del file Excel con la nostra funzione
               const rawData = await parseExcelFile(fileToAnalyze);
+              console.log('🔴 DEBUG EXCEL - FILE:', fileToAnalyze?.name);
+              console.log('🔴 DEBUG EXCEL - DATI RAW:', rawData);
               
               // FILTRA RIGHE VUOTE E NOMI FAKE
               const data = rawData.filter(row => {
@@ -2547,6 +2549,9 @@ Rispondi con:
                 
                 return true;
               });
+              console.log('🔴 DEBUG EXCEL - DATI FILTRATI:', data);
+              console.log('🔴 DEBUG EXCEL - WINDOW.TEMPEXCELFILE:', window.tempExcelFile);
+              console.log('🔴 DEBUG EXCEL - UPLOADEDFILES:', uploadedFiles);
               
               // VERIFICA SE IL FILE HA DATI REALI
               if (!data || data.length === 0) {
@@ -2649,7 +2654,8 @@ IMPORTANTE: Usa SOLO i dati reali dal file. Non inventare nulla.
 Concentrati su AZIONI PRATICHE che l'utente può fare subito.
 
 TERMINA sempre con una domanda diretta su cosa fare.
-              `;
+`;
+              console.log('🔴 PROMPT COMPLETO INVIATO:', analysisPrompt);
               
               // Verifica se il backend è disponibile
               const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://nyra-backend-c7zi.onrender.com';
