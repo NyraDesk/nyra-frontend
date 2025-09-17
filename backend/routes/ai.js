@@ -40,11 +40,15 @@ router.post('/chat', async (req, res) => {
       model || 'anthropic/claude-3.5-sonnet'
     );
 
+    // Formato compatibile con OpenRouter che il frontend si aspetta
     res.json({
-      success: true,
-      response,
+      choices: [{
+        message: {
+          content: response
+        }
+      }],
       model: model || 'anthropic/claude-3.5-sonnet',
-      timestamp: new Date().toISOString()
+      usage: {}  // OpenRouter lo include ma possiamo lasciarlo vuoto
     });
 
   } catch (error) {
