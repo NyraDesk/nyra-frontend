@@ -2299,7 +2299,11 @@ function App() {
             const workbook = XLSX.read(data, { type: 'binary' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+              raw: false,        // Converte le date in stringhe
+              dateNF: 'dd/mm/yyyy'  // Formato date italiano
+            });
+            console.log('Dati parsati da Excel:', jsonData);
             resolve(jsonData);
           } catch (error) {
             reject(error);
