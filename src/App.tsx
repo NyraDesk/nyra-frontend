@@ -2620,6 +2620,9 @@ Vuoi provare con un file che contiene dati reali?`,
                 return;
               }
               
+              // Debug: Log dei dati Excel prima di inviarli
+              console.log('Dati Excel inviati a OpenRouter:', data);
+              
               // Prepara prompt per OpenRouter con DATI REALI dal file Excel
               const analysisPrompt = `
 Analizza questo file Excel REALE e capisci ESATTAMENTE cosa contiene.
@@ -2739,7 +2742,7 @@ ${(() => {
                       }
                     ],
                     temperature: 0.7,
-                    max_tokens: 1000
+                    max_tokens: 4000
                   })
                 });
 
@@ -2816,6 +2819,7 @@ AZIONI DISPONIBILI:
               
               // Salva dati per azioni successive
               window.tempExcelData = data;
+              console.log('Dati salvati in window.tempExcelData:', window.tempExcelData);
               
             } catch (error) {
               console.error('Errore analisi AI:', error);
