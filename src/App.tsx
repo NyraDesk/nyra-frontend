@@ -2299,46 +2299,27 @@ function App() {
             const workbook = XLSX.read(data, { type: 'binary' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-               const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-                 raw: false,
-                 dateNF: 'dd/mm/yyyy'
+               const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+               // Rimuovi righe con "PROGETTI CLIENTI" o "Data:"
+               const cleanData = jsonData.filter(row => {
+                 const firstValue = Object.values(row)[0];
+                 return firstValue && 
+                        !String(firstValue).includes('PROGETTI CLIENTI') &&
+                        !String(firstValue).includes('Data:');
                });
 
-               // Pulisci i dati: rimuovi righe con troppi campi vuoti o strani
-               const cleanedData = jsonData.filter(row => {
-                 const keys = Object.keys(row);
-                 // Rimuovi righe che hanno "PROGETTI CLIENTI" o sono principalmente vuote
-                 const hasValidData = keys.some(key => 
-                   !key.includes('EMPTY') && 
-                   row[key] && 
-                   row[key] !== 'PROGETTI CLIENTI'
-                 );
-                 return hasValidData;
-               });
+               // Rimappa con nomi colonne corretti
+               const finalData = cleanData.map(row => ({
+                 Nome: row['Nome'] || row['PROGETTI CLIENTI'] || '',
+                 Email: row['Email'] || row['__EMPTY'] || '',  
+                 Importo: row['Importo'] || row['__EMPTY_1'] || '',
+                 Progetto: row['Progetto'] || row['__EMPTY_2'] || '',
+                 Scadenza: row['Scadenza'] || row['__EMPTY_3'] || ''
+               }));
 
-               // Se ci sono colonne __EMPTY, prova a rinominarle
-               const mappedData = cleanedData.map(row => {
-                 const newRow = {};
-                 Object.keys(row).forEach((key, index) => {
-                   if (key.includes('__EMPTY')) {
-                     // Prova a indovinare il nome della colonna dal contenuto
-                     const value = row[key];
-                     if (value && value.includes('@')) {
-                       newRow['Email'] = value;
-                     } else if (value && value.match(/^\d+$/)) {
-                       newRow['Importo'] = value;
-                     } else {
-                       newRow[`Colonna_${index}`] = value;
-                     }
-                   } else {
-                     newRow[key] = row[key];
-                   }
-                 });
-                 return newRow;
-               });
-
-               console.log('Dati parsati da Excel:', mappedData);
-               resolve(mappedData);
+               console.log('Dati parsati da Excel:', finalData);
+               resolve(finalData);
           } catch (error) {
             reject(error);
           }
