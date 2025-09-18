@@ -3,6 +3,35 @@ import { EXTERNAL_APIS } from './config/external-apis';
 import { API_URL } from './config/api';
 import { ExcelResource } from './mcp/excel-resource';
 
+// Funzione per formattazione generica dell'analisi Excel
+const formatAnalysis = (data: any) => {
+  let output = `📊 ANALISI FILE EXCEL\n\n`;
+  output += `📈 Totale record trovati: ${data.totalRecords}\n\n`;
+  
+  // Se ci sono dati, mostra preview
+  if (data.preview && data.preview.length > 0) {
+    output += `📋 ANTEPRIMA DATI (primi ${data.preview.length} record):\n`;
+    output += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    
+    data.preview.forEach((row: any, index: number) => {
+      output += `Record ${index + 1}:\n`;
+      // Mostra TUTTI i campi che trova, qualsiasi essi siano
+      Object.keys(row).forEach(key => {
+        output += `  • ${key}: ${row[key]}\n`;
+      });
+      output += `\n`;
+    });
+  }
+  
+  // Mostra le colonne trovate
+  if (data.preview.length > 0) {
+    const columns = Object.keys(data.preview[0]);
+    output += `📊 Colonne identificate: ${columns.join(', ')}\n`;
+  }
+  
+  return output;
+};
+
 // Estendi l'interfaccia Window per le proprietà personalizzate
 declare global {
   interface Window {
@@ -2554,7 +2583,7 @@ Rispondi con:
               
               const analysisMsg = {
                 id: Date.now().toString(),
-                text: `✅ Analisi completata: ${result.totalRecords} clienti trovati\n\nDettagli primi 3:\n${JSON.stringify(result.preview, null, 2)}`,
+                text: formatAnalysis(result),
                 isUser: false,
                 timestamp: new Date()
               };
