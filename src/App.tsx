@@ -2316,7 +2316,7 @@ function App() {
                  Importo: row['Importo'] || row['__EMPTY_1'] || '',
                  Progetto: row['Progetto'] || row['__EMPTY_2'] || '',
                  Scadenza: row['Scadenza'] || row['__EMPTY_3'] || ''
-               }));
+               })).filter(row => row.Nome !== 'Nome' && row.Nome !== '');
 
                console.log('Dati parsati da Excel:', finalData);
                resolve(finalData);
