@@ -2336,7 +2336,7 @@ function App() {
       console.log("inputMessage:", inputMessage);
       console.log("uploadedFiles:", uploadedFiles);
       
-      // Gestione Excel - solo con verbi di azione (esclusi analizza/analisi che vanno al controllo specifico)
+      // Gestione Excel - solo con verbi di azione
       if ((inputMessage.toLowerCase().includes('crea') && inputMessage.toLowerCase().includes('fattura')) ||
           inputMessage.toLowerCase().includes('genera') ||
           inputMessage.toLowerCase().includes('invia') ||

@@ -24,6 +24,7 @@
     "build-electron-prod": "tsc -p src/electron/tsconfig.json && electron dist/electron/main.js"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.18.1",
     "cors": "^2.8.5",
     "dotenv": "^17.2.1",
     "electron-is-dev": "^3.0.1",
