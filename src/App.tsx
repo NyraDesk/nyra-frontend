@@ -2299,10 +2299,11 @@ function App() {
             const workbook = XLSX.read(data, { type: 'binary' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-              raw: false,        // Converte le date in stringhe
-              dateNF: 'dd/mm/yyyy'  // Formato date italiano
-            });
+               const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+                 raw: false,        // Converte le date in stringhe
+                 dateNF: 'dd/mm/yyyy',  // Formato date italiano
+                 range: 2  // Salta le prime 2 righe non-dati
+               });
             console.log('Dati parsati da Excel:', jsonData);
             resolve(jsonData);
           } catch (error) {
@@ -2513,7 +2514,7 @@ Rispondi con:
           window.tempExcelFile = file;
           
           setInputMessage('');
-          // setUploadedFiles([]); // DISABILITATO - Fix per mantenere file disponibile
+          setTimeout(() => setUploadedFiles([]), 100); // Pulisce dopo che è stato salvato
           return;
         }
         
