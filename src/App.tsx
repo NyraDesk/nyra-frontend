@@ -2383,7 +2383,7 @@ function App() {
              messageToSend.toLowerCase().includes('mail') ||
              messageToSend.toLowerCase().includes('invia') ||
              messageToSend.toLowerCase().includes('prepara')) && 
-            window.tempExcelData) {
+            window.tempExcelData && window.tempExcelData.length > 0) {
           
           await processExcelForEmails(window.tempExcelData);
           console.log("Uscita 1.5: Processo Excel per email con dati temporanei");
@@ -2924,7 +2924,7 @@ Oppure carica un nuovo file Excel per iniziare.`,
             messageToSend.toLowerCase().includes('invia') ||
             messageToSend.toLowerCase().includes('prepara')) {
           
-          if (window.tempExcelData) {
+          if (window.tempExcelData && window.tempExcelData.length > 0) {
             // Genera email con i dati già analizzati
             await processExcelForEmails(window.tempExcelData);
             window.tempExcelData = null;
