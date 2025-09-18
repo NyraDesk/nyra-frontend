@@ -2578,8 +2578,12 @@ Rispondi con:
           
           if (window.tempExcelFile) {
             try {
+              console.log('🔴 DEBUG: Inizio analisi Excel');
+              console.log('🔴 DEBUG: File:', window.tempExcelFile.name, window.tempExcelFile.size);
+              
               // Ottieni TUTTI i dati
               const result = await excelResource.analyze(window.tempExcelFile);
+              console.log('🔴 DEBUG: Risultato analisi:', result);
               
               // Crea prompt INTELLIGENTE per l'AI
               const aiPrompt = `
@@ -2600,12 +2604,17 @@ Usa un linguaggio professionale ma amichevole.`;
 
               // Inizializza OpenRouter se non esiste ancora
               if (!window.openRouter) {
+                console.log('🔴 DEBUG: Inizializzo OpenRouter');
                 const { OpenRouterConnector } = await import('./services/openrouter');
                 window.openRouter = new OpenRouterConnector();
               }
               
+              console.log('🔴 DEBUG: Invio prompt a OpenRouter');
+              console.log('🔴 DEBUG: Prompt length:', aiPrompt.length);
+              
               // Invia all'AI per analisi VERA
               const aiResponse = await window.openRouter.sendMessage(aiPrompt, []);
+              console.log('🔴 DEBUG: Risposta OpenRouter:', aiResponse);
               
               // Mostra la risposta INTELLIGENTE dell'AI
               setMessages(prev => [...prev, {
@@ -2616,10 +2625,12 @@ Usa un linguaggio professionale ma amichevole.`;
               }]);
               
             } catch (error) {
-              console.error('Errore analisi:', error);
+              console.error('🔴 ERRORE ANALISI:', error);
+              console.error('🔴 ERRORE STACK:', error.stack);
+              console.error('🔴 ERRORE MESSAGE:', error.message);
               setMessages(prev => [...prev, {
                 id: Date.now().toString(),
-                text: "Errore nell'analisi. Riprova.",
+                text: `❌ Errore nell'analisi: ${error.message}\n\nDettagli nel console. Riprova.`,
                 isUser: false,
                 timestamp: new Date()
               }]);
