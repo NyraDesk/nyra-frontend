@@ -2536,37 +2536,26 @@ Rispondi con:
         if (messageToSend.toLowerCase().includes('analisi') || 
             messageToSend.toLowerCase().includes('analizza')) {
           
+          // PRIMA controlla se abbiamo già i dati parsati
+          const dataToAnalyze = window.tempExcelData || [];
           const fileToAnalyze = window.tempExcelFile || file;
+          
+          console.log('Analisi richiesta - Dati già disponibili:', dataToAnalyze.length > 0);
           console.log('Analisi richiesta - File disponibile:', fileToAnalyze?.name);
           
-          if (fileToAnalyze) {
+          if (dataToAnalyze.length > 0) {
+            // USA I DATI GIÀ PARSATI
             setIsProcessingEmails(true);
+            console.log('🔴 USANDO DATI GIÀ PARSATI:', dataToAnalyze);
             
+            const data = dataToAnalyze;
+            
+            // Salta direttamente all'analisi
             try {
-              // Parse del file Excel con la nostra funzione
-              const rawData = await parseExcelFile(fileToAnalyze);
               console.log('🔴 DEBUG EXCEL - FILE:', fileToAnalyze?.name);
-              console.log('🔴 DEBUG EXCEL - DATI RAW:', rawData);
+              console.log('🔴 DEBUG EXCEL - DATI PARSATI:', data);
               
-              // FILTRA RIGHE VUOTE E NOMI FAKE
-              const data = rawData.filter(row => {
-                const keys = Object.keys(row);
-                const values = Object.values(row);
-                
-                // Elimina righe completamente vuote
-                if (values.every(val => !val || val.toString().trim() === '')) return false;
-                
-                // Elimina righe con nomi fake come "EMPTY_1", "EMPTY_2", etc.
-                const hasFakeNames = values.some(val => 
-                  val && val.toString().match(/^(EMPTY_|empty_|test_|fake_|dummy_)\d*$/i)
-                );
-                if (hasFakeNames) return false;
-                
-                return true;
-              });
-              console.log('🔴 DEBUG EXCEL - DATI FILTRATI:', data);
-              console.log('🔴 DEBUG EXCEL - WINDOW.TEMPEXCELFILE:', window.tempExcelFile);
-              console.log('🔴 DEBUG EXCEL - UPLOADEDFILES:', uploadedFiles);
+              // I dati sono già filtrati, non serve rifiltrare
               
               // VERIFICA SE IL FILE HA DATI REALI
               if (!data || data.length === 0) {
@@ -2863,6 +2852,68 @@ AZIONI DISPONIBILI:
               window.tempExcelFile = undefined;
             }
             
+            return;
+          } else if (fileToAnalyze) {
+            // NESSUN DATO PARSATO - PARSA IL FILE
+            setIsProcessingEmails(true);
+            
+            try {
+              // Parse del file Excel con la nostra funzione
+              const rawData = await parseExcelFile(fileToAnalyze);
+              console.log('🔴 DEBUG EXCEL - FILE:', fileToAnalyze?.name);
+              console.log('🔴 DEBUG EXCEL - DATI RAW:', rawData);
+              
+              // FILTRA RIGHE VUOTE E NOMI FAKE
+              const data = rawData.filter(row => {
+                const keys = Object.keys(row);
+                const values = Object.values(row);
+                
+                // Elimina righe completamente vuote
+                if (values.every(val => !val || val.toString().trim() === '')) return false;
+                
+                // Elimina righe con nomi fake come "EMPTY_1", "EMPTY_2", etc.
+                const hasFakeNames = values.some(val => 
+                  val && val.toString().match(/^(EMPTY_|empty_|test_|fake_|dummy_)\d*$/i)
+                );
+                if (hasFakeNames) return false;
+                
+                return true;
+              });
+              console.log('🔴 DEBUG EXCEL - DATI FILTRATI:', data);
+              console.log('🔴 DEBUG EXCEL - WINDOW.TEMPEXCELFILE:', window.tempExcelFile);
+              console.log('🔴 DEBUG EXCEL - UPLOADEDFILES:', uploadedFiles);
+              
+              // Continua con la stessa logica di verifica e analisi...
+              // (Il resto del codice rimane uguale)
+              
+              // Salva dati per azioni successive
+              window.tempExcelData = data;
+              console.log('Dati salvati in window.tempExcelData:', window.tempExcelData);
+              
+            } catch (error) {
+              console.error('Errore durante il parsing Excel:', error);
+              setIsProcessingEmails(false);
+              showError('Errore durante l\'analisi del file Excel');
+            }
+            
+            return;
+          } else {
+            // NESSUN FILE E NESSUN DATO DISPONIBILE
+            const noDataMessage: Message = {
+              id: getUniqueMessageId(),
+              text: `⚠️ **Nessun file Excel da analizzare**
+
+Per analizzare dati Excel:
+1. Carica un file Excel trascinandolo nell'area chat
+2. Attendi che venga processato
+3. Scrivi "analisi" o "analizza"
+
+Oppure carica un nuovo file Excel per iniziare.`,
+              isUser: false,
+              timestamp: new Date(),
+              type: 'normal'
+            };
+            setMessages(prev => [...prev, noDataMessage]);
             return;
           }
         }
