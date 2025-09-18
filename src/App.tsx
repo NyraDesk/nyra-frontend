@@ -2208,7 +2208,7 @@ function App() {
 
     const getConversationTitle = (messageContent: string): string => {
       const content = messageContent.toLowerCase();
-      if (content.includes('email') || content.includes('mail')) return 'Email Management';
+      // Rimossi controlli per parole singole - solo titoli generici
       if (content.includes('calendario') || content.includes('appuntamento')) return 'Calendar Planning';
       if (content.includes('file') || content.includes('documento')) return 'File Management';
       if (content.includes('safari') || content.includes('browser')) return 'Web Navigation';
@@ -2335,8 +2335,13 @@ function App() {
       console.log("inputMessage:", inputMessage);
       console.log("uploadedFiles:", uploadedFiles);
       
-      // Gestione Excel
-      if (inputMessage.toLowerCase().includes('excel') || inputMessage.toLowerCase().includes('crea') && inputMessage.toLowerCase().includes('fattura')) {
+      // Gestione Excel - solo con verbi di azione
+      if ((inputMessage.toLowerCase().includes('crea') && inputMessage.toLowerCase().includes('fattura')) ||
+          inputMessage.toLowerCase().includes('analizza') || 
+          inputMessage.toLowerCase().includes('analisi') ||
+          inputMessage.toLowerCase().includes('genera') ||
+          inputMessage.toLowerCase().includes('invia') ||
+          inputMessage.toLowerCase().includes('prepara')) {
         const messageToSend = inputMessage.trim();
         
         // Aggiungi messaggio utente
