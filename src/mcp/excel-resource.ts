@@ -62,6 +62,15 @@ export class ExcelResource {
     this.data = [];
   }
 
+  async analyze(file: File): Promise<{ totalRecords: number; preview: ExcelData[] }> {
+    const data = await this.parseExcelFile(file);
+    
+    return {
+      totalRecords: data.length,
+      preview: data.slice(0, 3) // Prime 3 righe per preview
+    };
+  }
+
   getResourceInfo() {
     return {
       uri: MCP_CONFIG.resources[0].uri,

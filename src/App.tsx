@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { EXTERNAL_APIS } from './config/external-apis';
 import { API_URL } from './config/api';
+import { ExcelResource } from './mcp/excel-resource';
 
 // Estendi l'interfaccia Window per le proprietà personalizzate
 declare global {
@@ -2290,6 +2291,8 @@ function App() {
       }
     };
 
+    // COMMENTATO - Sostituito con MCP ExcelResource
+    /*
     const parseExcelFile = async (file: File): Promise<any[]> => {
       return new Promise((resolve, reject) => {
         const reader = new FileReader();
@@ -2330,6 +2333,7 @@ function App() {
         reader.readAsBinaryString(file);
       });
     };
+    */
 
     const handleSendMessage = async () => {
       console.log("handleSendMessage chiamata");
@@ -2537,18 +2541,49 @@ Rispondi con:
           return;
         }
         
-        // Se scrive "analisi" o "analizza" - FA L'ANALISI DEL FILE
+        // Se scrive "analisi" o "analizza" - USA NUOVO SISTEMA MCP
         if (messageToSend.toLowerCase().includes('analisi') || 
             messageToSend.toLowerCase().includes('analizza')) {
           
-          // PRIMA controlla se abbiamo già i dati parsati
-          const dataToAnalyze = window.tempExcelData || [];
-          const fileToAnalyze = window.tempExcelFile || file;
+          // Usa nuovo sistema MCP
+          const excelResource = new ExcelResource();
           
-          console.log('Analisi richiesta - Dati già disponibili:', dataToAnalyze.length > 0);
-          console.log('Analisi richiesta - File disponibile:', fileToAnalyze?.name);
+          if (window.tempExcelFile) {
+            try {
+              const result = await excelResource.analyze(window.tempExcelFile);
+              
+              const analysisMsg = {
+                id: Date.now().toString(),
+                text: `✅ Analisi completata: ${result.totalRecords} clienti trovati\n\nDettagli primi 3:\n${JSON.stringify(result.preview, null, 2)}`,
+                isUser: false,
+                timestamp: new Date()
+              };
+              
+              setMessages(prev => [...prev, analysisMsg]);
+            } catch (error) {
+              console.error('Errore analisi:', error);
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: "Errore nell'analisi del file",
+                isUser: false,
+                timestamp: new Date()
+              }]);
+            }
+          } else {
+            setMessages(prev => [...prev, {
+              id: Date.now().toString(),
+              text: "⚠️ Carica prima un file Excel",
+              isUser: false,
+              timestamp: new Date()
+            }]);
+          }
           
-          // Se non ci sono dati e non c'è file, mostra messaggio di errore
+          setInputMessage('');
+          return;
+        }
+
+        // COMMENTATO - CODICE VECCHIO SOSTITUITO CON MCP
+        /*
           if (dataToAnalyze.length === 0 && !fileToAnalyze) {
             const noDataMessage: Message = {
               id: getUniqueMessageId(),
@@ -2926,6 +2961,7 @@ Oppure carica un nuovo file Excel per iniziare.`,
             return;
           }
         }
+        */
 
         // Se scrive "genera" o "email" con file - USA DATI SALVATI
         if (messageToSend.toLowerCase().includes('email') || 
@@ -3806,6 +3842,8 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
       }
     };
 
+    // COMMENTATO - Sostituito con MCP ExcelResource
+    /*
     // Funzione per processare Excel per email
     const processExcelForEmails = async (file: File) => {
       setIsProcessingEmails(true);
@@ -3904,6 +3942,7 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
         setUploadedFiles([]);
       }
     };
+    */
 
     // Funzione per inviare le email
     const handleSendEmails = async (selectedIndexes: number[], modifiedEmails?: any[]) => {
