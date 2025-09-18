@@ -2300,12 +2300,45 @@ function App() {
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
                const jsonData = XLSX.utils.sheet_to_json(worksheet, {
-                 raw: false,        // Converte le date in stringhe
-                 dateNF: 'dd/mm/yyyy',  // Formato date italiano
-                 range: 2  // Salta le prime 2 righe non-dati
+                 raw: false,
+                 dateNF: 'dd/mm/yyyy'
                });
-            console.log('Dati parsati da Excel:', jsonData);
-            resolve(jsonData);
+
+               // Pulisci i dati: rimuovi righe con troppi campi vuoti o strani
+               const cleanedData = jsonData.filter(row => {
+                 const keys = Object.keys(row);
+                 // Rimuovi righe che hanno "PROGETTI CLIENTI" o sono principalmente vuote
+                 const hasValidData = keys.some(key => 
+                   !key.includes('EMPTY') && 
+                   row[key] && 
+                   row[key] !== 'PROGETTI CLIENTI'
+                 );
+                 return hasValidData;
+               });
+
+               // Se ci sono colonne __EMPTY, prova a rinominarle
+               const mappedData = cleanedData.map(row => {
+                 const newRow = {};
+                 Object.keys(row).forEach((key, index) => {
+                   if (key.includes('__EMPTY')) {
+                     // Prova a indovinare il nome della colonna dal contenuto
+                     const value = row[key];
+                     if (value && value.includes('@')) {
+                       newRow['Email'] = value;
+                     } else if (value && value.match(/^\d+$/)) {
+                       newRow['Importo'] = value;
+                     } else {
+                       newRow[`Colonna_${index}`] = value;
+                     }
+                   } else {
+                     newRow[key] = row[key];
+                   }
+                 });
+                 return newRow;
+               });
+
+               console.log('Dati parsati da Excel:', mappedData);
+               resolve(mappedData);
           } catch (error) {
             reject(error);
           }
