@@ -2509,14 +2509,7 @@ function App() {
         // Nessun file o dato disponibile
         const noDataMessage: Message = {
           id: getUniqueMessageId(),
-          text: "⚠️ **Nessun file Excel da analizzare**
-
-Per analizzare dati Excel:
-1. Carica un file Excel trascinandolo nell'area chat
-2. Attendi che venga processato
-3. Scrivi \"analisi\" o \"analizza\"
-
-Oppure carica un nuovo file Excel per iniziare.",
+          text: "⚠️ Nessun file Excel da analizzare. Carica un file Excel e poi scrivi 'analizza' per iniziare.",
           isUser: false,
           timestamp: new Date(),
           type: 'normal'
