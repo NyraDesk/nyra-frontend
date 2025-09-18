@@ -11,6 +11,7 @@ const authRoutes = require('./routes/auth');
 const authOAuthRoutes = require('./routes/authOAuthRoutes');
 const emailRoutes = require('./routes/email');
 const aiRoutes = require('./routes/ai');
+const excelRoutes = require('./routes/excel');
 
 // Import middleware
 const authMiddleware = require('./middleware/auth');
@@ -58,6 +59,7 @@ app.use('/api/auth', authRoutes);
 app.use('/auth', authOAuthRoutes);  // Google OAuth routes
 app.use('/api/email', authMiddleware.optional, emailRoutes);
 app.use('/api/ai', authMiddleware.optional, aiRoutes);
+app.use('/api/excel', excelRoutes);  // Excel routes
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -99,6 +101,11 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('  POST /api/email/parse-excel - Parse Excel file');
   console.log('  POST /api/ai/chat - Chat with OpenRouter');
   console.log('  GET  /api/ai/test - Test AI connection');
+  console.log('  POST /api/excel/upload - Upload Excel file');
+  console.log('  POST /api/excel/analyze - Analyze Excel with AI');
+  console.log('  GET  /api/excel/files - List uploaded files');
+  console.log('  GET  /api/excel/file/:id - Get file data');
+  console.log('  DELETE /api/excel/file/:id - Delete file');
 });
 
 module.exports = app;
