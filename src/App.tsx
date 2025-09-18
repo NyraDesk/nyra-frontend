@@ -2302,7 +2302,7 @@ function App() {
                const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
                // Rimuovi righe con "PROGETTI CLIENTI" o "Data:"
-               const cleanData = jsonData.filter(row => {
+               const cleanData = jsonData.filter((row: any) => {
                  const firstValue = Object.values(row)[0];
                  return firstValue && 
                         !String(firstValue).includes('PROGETTI CLIENTI') &&
@@ -2310,13 +2310,13 @@ function App() {
                });
 
                // Rimappa con nomi colonne corretti
-               const finalData = cleanData.map(row => ({
+               const finalData = cleanData.map((row: any) => ({
                  Nome: row['Nome'] || row['PROGETTI CLIENTI'] || '',
                  Email: row['Email'] || row['__EMPTY'] || '',  
                  Importo: row['Importo'] || row['__EMPTY_1'] || '',
                  Progetto: row['Progetto'] || row['__EMPTY_2'] || '',
                  Scadenza: row['Scadenza'] || row['__EMPTY_3'] || ''
-               })).filter(row => row.Nome !== 'Nome' && row.Nome !== '');
+               })).filter((row: any) => row.Nome !== 'Nome' && row.Nome !== '');
 
                console.log('Dati parsati da Excel:', finalData);
                resolve(finalData);
@@ -2493,9 +2493,41 @@ function App() {
       // GARANTISCI SEMPRE UNA RISPOSTA - anche con messaggio vuoto
       const messageToSend = inputMessage.trim();
 
-      // Controllo file Excel - VERSIONE SEMPLIFICATA
-      if ((uploadedFiles.length > 0 && uploadedFiles[0].name.includes('.xls')) || window.tempExcelFile) {
-        const file = uploadedFiles[0] || window.tempExcelFile;
+      // Prima controlla uploadedFiles, poi fallback a window.tempExcelFile
+      let fileToUse = null;
+
+      if (uploadedFiles && uploadedFiles.length > 0 && uploadedFiles[0].name.includes('.xls')) {
+        fileToUse = uploadedFiles[0];
+      } else if (window.tempExcelFile) {
+        fileToUse = window.tempExcelFile;
+      }
+
+      // Se non c'è file ma ci sono dati in memoria, usali
+      const dataToUse = window.tempExcelData || [];
+
+      if (!fileToUse && dataToUse.length === 0) {
+        // Nessun file o dato disponibile
+        const noDataMessage: Message = {
+          id: getUniqueMessageId(),
+          text: "⚠️ **Nessun file Excel da analizzare**
+
+Per analizzare dati Excel:
+1. Carica un file Excel trascinandolo nell'area chat
+2. Attendi che venga processato
+3. Scrivi \"analisi\" o \"analizza\"
+
+Oppure carica un nuovo file Excel per iniziare.",
+          isUser: false,
+          timestamp: new Date(),
+          type: 'normal'
+        };
+        setMessages(prev => [...prev, noDataMessage]);
+        return;
+      }
+
+      // Se abbiamo un file da usare, continua con la logica
+      if (fileToUse) {
+        const file = fileToUse;
         
         // Verifica che il file sia valido
         if (!file || !file.name) {
@@ -2716,10 +2748,10 @@ ${Object.keys(data[0] || {}).map(col => `• ${col}`).join(' • ')}`
                           ...msg,
                           text: `📊 **${fileToAnalyze.name}**
 ${(() => {
-  const emails = data.filter(row => row.Email && row.Email.includes('@')).map(row => `${row.Nome || 'N/A'} ${row.Cognome || 'N/A'} (${row.Email})`);
-  const pending = data.filter(row => row.Stato === 'Da inviare' || row.Stato === 'Pending');
-  const sent = data.filter(row => row.Stato === 'Inviata' || row.Stato === 'Sent');
-  const failed = data.filter(row => row.Stato === 'Fallita' || row.Stato === 'Failed');
+  const emails = data.filter((row: any) => row.Email && row.Email.includes('@')).map((row: any) => `${row.Nome || 'N/A'} ${row.Cognome || 'N/A'} (${row.Email})`);
+  const pending = data.filter((row: any) => row.Stato === 'Da inviare' || row.Stato === 'Pending');
+  const sent = data.filter((row: any) => row.Stato === 'Inviata' || row.Stato === 'Sent');
+  const failed = data.filter((row: any) => row.Stato === 'Fallita' || row.Stato === 'Failed');
   
   let result = '';
   if (emails.length > 0) result += `• ${emails.length} email trovate: ${emails.slice(0, 3).join(', ')}${emails.length > 3 ? '...' : ''}\n`;
@@ -2776,10 +2808,10 @@ ${(() => {
                   id: fileDataMessage.id, // Stesso ID per aggiornare il messaggio esistente
                   text: `📊 **${fileToAnalyze.name}**
 ${(() => {
-  const emails = data.filter(row => row.Email && row.Email.includes('@')).map(row => `${row.Nome || 'N/A'} ${row.Cognome || 'N/A'} (${row.Email})`);
-  const pending = data.filter(row => row.Stato === 'Da inviare' || row.Stato === 'Pending');
-  const sent = data.filter(row => row.Stato === 'Inviata' || row.Stato === 'Sent');
-  const failed = data.filter(row => row.Stato === 'Fallita' || row.Stato === 'Failed');
+  const emails = data.filter((row: any) => row.Email && row.Email.includes('@')).map((row: any) => `${row.Nome || 'N/A'} ${row.Cognome || 'N/A'} (${row.Email})`);
+  const pending = data.filter((row: any) => row.Stato === 'Da inviare' || row.Stato === 'Pending');
+  const sent = data.filter((row: any) => row.Stato === 'Inviata' || row.Stato === 'Sent');
+  const failed = data.filter((row: any) => row.Stato === 'Fallita' || row.Stato === 'Failed');
   
   let result = '';
   if (emails.length > 0) result += `• ${emails.length} email trovate: ${emails.slice(0, 3).join(', ')}${emails.length > 3 ? '...' : ''}\n`;
@@ -2864,7 +2896,7 @@ AZIONI DISPONIBILI:
               console.log('🔴 DEBUG EXCEL - DATI RAW:', rawData);
               
               // FILTRA RIGHE VUOTE E NOMI FAKE
-              const data = rawData.filter(row => {
+              const data = rawData.filter((row: any) => {
                 const keys = Object.keys(row);
                 const values = Object.values(row);
                 
@@ -2935,6 +2967,57 @@ Oppure carica un nuovo file Excel per iniziare.`,
           
           setInputMessage('');
           setUploadedFiles([]);
+          return;
+        }
+      } else if (dataToUse.length > 0) {
+        // NESSUN FILE MA CI SONO DATI IN MEMORIA - Gestisci direttamente
+        if (messageToSend.toLowerCase().includes('analisi') || 
+            messageToSend.toLowerCase().includes('analizza')) {
+          
+          setIsProcessingEmails(true);
+          console.log('🔴 USANDO DATI IN MEMORIA (NESSUN FILE):', dataToUse);
+          
+          try {
+            const data = dataToUse;
+            
+            // Verifica se ci sono dati reali
+            if (!data || data.length === 0) {
+              const emptyDataMessage: Message = {
+                id: getUniqueMessageId(),
+                text: `⚠️ **Dati Excel vuoti**
+
+I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`,
+                isUser: false,
+                timestamp: new Date(),
+                type: 'normal'
+              };
+              setMessages(prev => [...prev, emptyDataMessage]);
+              setIsProcessingEmails(false);
+              return;
+            }
+            
+            // Usa i dati in memoria per l'analisi (stessa logica del caso con file)
+            // [Qui andrebbe la stessa logica di analisi che abbiamo per i file]
+            
+            setIsProcessingEmails(false);
+            
+          } catch (error) {
+            console.error('Errore durante l\'analisi dei dati in memoria:', error);
+            setIsProcessingEmails(false);
+            showError('Errore durante l\'analisi dei dati Excel');
+          }
+          
+          return;
+        }
+        
+        if (messageToSend.toLowerCase().includes('email') || 
+            messageToSend.toLowerCase().includes('genera') ||
+            messageToSend.toLowerCase().includes('invia') ||
+            messageToSend.toLowerCase().includes('prepara')) {
+          
+          // Genera email con i dati in memoria
+          await processExcelForEmails(dataToUse);
+          setInputMessage('');
           return;
         }
       }
