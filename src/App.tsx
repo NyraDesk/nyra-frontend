@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { EXTERNAL_APIS } from './config/external-apis';
+import { API_URL } from './config/api';
 
 // Estendi l'interfaccia Window per le proprietà personalizzate
 declare global {

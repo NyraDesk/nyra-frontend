@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { EXTERNAL_APIS } from '../config/external-apis';
+import { API_URL } from '../config/api';
 
 export class ExcelService {
   // Helper per estrarre valori numerici da celle
