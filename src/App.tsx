@@ -2493,18 +2493,6 @@ function App() {
       // Se non c'è file ma ci sono dati in memoria, usali
       const dataToUse = window.tempExcelData || [];
 
-      if (!fileToUse && dataToUse.length === 0) {
-        // Nessun file o dato disponibile
-        const noDataMessage: Message = {
-          id: getUniqueMessageId(),
-          text: "⚠️ Nessun file Excel da analizzare. Carica un file Excel e poi scrivi 'analizza' per iniziare.",
-          isUser: false,
-          timestamp: new Date(),
-          type: 'normal'
-        };
-        setMessages(prev => [...prev, noDataMessage]);
-        return;
-      }
 
       // Se abbiamo un file da usare, continua con la logica
       if (fileToUse) {
@@ -2555,6 +2543,19 @@ Rispondi con:
           
           console.log('Analisi richiesta - Dati già disponibili:', dataToAnalyze.length > 0);
           console.log('Analisi richiesta - File disponibile:', fileToAnalyze?.name);
+          
+          // Se non ci sono dati e non c'è file, mostra messaggio di errore
+          if (dataToAnalyze.length === 0 && !fileToAnalyze) {
+            const noDataMessage: Message = {
+              id: getUniqueMessageId(),
+              text: "⚠️ Nessun file Excel da analizzare. Carica un file Excel e poi scrivi 'analizza' per iniziare.",
+              isUser: false,
+              timestamp: new Date(),
+              type: 'normal'
+            };
+            setMessages(prev => [...prev, noDataMessage]);
+            return;
+          }
           
           if (dataToAnalyze.length > 0) {
             // USA I DATI GIÀ PARSATI
