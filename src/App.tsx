@@ -2378,18 +2378,6 @@ function App() {
           return;
         }
         
-        // Check se l'utente vuole email con dati temporanei (senza file Excel caricato)
-        if ((messageToSend.toLowerCase().includes('email') || 
-             messageToSend.toLowerCase().includes('mail') ||
-             messageToSend.toLowerCase().includes('invia') ||
-             messageToSend.toLowerCase().includes('prepara')) && 
-            window.tempExcelData && window.tempExcelData.length > 0) {
-          
-          await processExcelForEmails(window.tempExcelData);
-          console.log("Uscita 1.5: Processo Excel per email con dati temporanei");
-          return;
-        }
-        
         // Reset altezza textarea
         setTimeout(() => {
           if (textareaRef.current) {
