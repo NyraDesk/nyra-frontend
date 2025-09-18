@@ -2866,7 +2866,6 @@ AZIONI DISPONIBILI:
               window.tempExcelFile = undefined;
             }
             
-            return;
           } else if (fileToAnalyze) {
             // NESSUN DATO PARSATO - PARSA IL FILE
             setIsProcessingEmails(true);
