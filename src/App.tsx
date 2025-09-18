@@ -2570,30 +2570,56 @@ Rispondi con:
           return;
         }
         
-        // Se scrive "analisi" o "analizza" - USA NUOVO SISTEMA MCP
+        // Se scrive "analisi" o "analizza" - USA AI INTELLIGENTE
         if (messageToSend.toLowerCase().includes('analisi') || 
             messageToSend.toLowerCase().includes('analizza')) {
           
-          // Usa nuovo sistema MCP
           const excelResource = new ExcelResource();
           
           if (window.tempExcelFile) {
             try {
+              // Ottieni TUTTI i dati
               const result = await excelResource.analyze(window.tempExcelFile);
               
-              const analysisMsg = {
+              // Crea prompt INTELLIGENTE per l'AI
+              const aiPrompt = `
+Hai questi dati da un file Excel:
+${JSON.stringify(result.data)}
+
+L'utente chiede: "${messageToSend}"
+
+Analizza i dati e rispondi in modo intelligente e specifico alla richiesta.
+Se chiede "analizza", fai un'analisi completa con:
+- Totale record
+- Statistiche rilevanti 
+- Pattern identificati
+- Suggerimenti utili
+
+Se chiede qualcosa di specifico, rispondi SOLO a quello.
+Usa un linguaggio professionale ma amichevole.`;
+
+              // Inizializza OpenRouter se non esiste ancora
+              if (!window.openRouter) {
+                const { OpenRouterConnector } = await import('./services/openrouter');
+                window.openRouter = new OpenRouterConnector();
+              }
+              
+              // Invia all'AI per analisi VERA
+              const aiResponse = await window.openRouter.sendMessage(aiPrompt, []);
+              
+              // Mostra la risposta INTELLIGENTE dell'AI
+              setMessages(prev => [...prev, {
                 id: Date.now().toString(),
-                text: formatAnalysis(result),
+                text: aiResponse,
                 isUser: false,
                 timestamp: new Date()
-              };
+              }]);
               
-              setMessages(prev => [...prev, analysisMsg]);
             } catch (error) {
               console.error('Errore analisi:', error);
               setMessages(prev => [...prev, {
                 id: Date.now().toString(),
-                text: "Errore nell'analisi del file",
+                text: "Errore nell'analisi. Riprova.",
                 isUser: false,
                 timestamp: new Date()
               }]);

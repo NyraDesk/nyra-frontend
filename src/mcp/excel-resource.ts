@@ -62,12 +62,14 @@ export class ExcelResource {
     this.data = [];
   }
 
-  async analyze(file: File): Promise<{ totalRecords: number; preview: ExcelData[] }> {
+  async analyze(file: File): Promise<{ success: boolean; totalRecords: number; data: ExcelData[]; columns: string[] }> {
     const data = await this.parseExcelFile(file);
     
     return {
+      success: true,
       totalRecords: data.length,
-      preview: data.slice(0, 3) // Prime 3 righe per preview
+      data: data, // TUTTI i dati, non preview!
+      columns: data.length > 0 ? Object.keys(data[0]) : []
     };
   }
 
