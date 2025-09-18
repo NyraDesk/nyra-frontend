@@ -2597,10 +2597,6 @@ Vuoi provare con un altro file?`,
                   type: 'normal'
                 };
                 setMessages(prev => [...prev, emptyFileMessage]);
-                setIsProcessingEmails(false);
-                setInputMessage('');
-                setUploadedFiles([]);
-                window.tempExcelFile = undefined;
                 return;
               }
               
@@ -2640,10 +2636,6 @@ Vuoi provare con un file che contiene dati reali?`,
                   type: 'normal'
                 };
                 setMessages(prev => [...prev, templateMessage]);
-                setIsProcessingEmails(false);
-                setInputMessage('');
-                setUploadedFiles([]);
-                window.tempExcelFile = undefined;
                 return;
               }
               
