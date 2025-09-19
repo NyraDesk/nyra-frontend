@@ -318,16 +318,31 @@ const Settings: React.FC<SettingsProps> = ({ onClose, onSubscriptionManagement, 
                 </div>
 
                 <button
-                  className="inline-flex items-center justify-center px-3 py-3 border border-gray-300 rounded transition-all hover:shadow-sm"
+                  className="transition-all"
                   style={{
+                    width: '100%',
+                    height: '48px',
                     background: 'white',
                     border: '1px solid #dadce0',
-                    padding: '12px',
-                    borderRadius: '4px'
+                    borderRadius: '8px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    cursor: 'pointer'
                   }}
                   onClick={connectGoogleWorkspace}
                   disabled={!userId}
                   title={userId ? 'Connetti Google Workspace' : 'Effettua il login con email per collegare Google'}
+                  onMouseEnter={(e) => {
+                    if (userId) {
+                      e.currentTarget.style.background = '#f8f9fa';
+                      e.currentTarget.style.boxShadow = '0 1px 2px 0 rgba(60,64,67,0.3)';
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'white';
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 >
                   <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
                        alt="Google" 
