@@ -318,16 +318,20 @@ const Settings: React.FC<SettingsProps> = ({ onClose, onSubscriptionManagement, 
                 </div>
 
                 <button
-                  className={`inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-colors ${
-                    userId 
-                      ? 'text-white bg-green-600 hover:bg-green-700 active:bg-green-800' 
-                      : 'text-gray-400 bg-gray-600 cursor-not-allowed'
-                  }`}
+                  className="inline-flex items-center justify-center px-3 py-3 border border-gray-300 rounded transition-all hover:shadow-sm"
+                  style={{
+                    background: 'white',
+                    border: '1px solid #dadce0',
+                    padding: '12px',
+                    borderRadius: '4px'
+                  }}
                   onClick={connectGoogleWorkspace}
                   disabled={!userId}
                   title={userId ? 'Connetti Google Workspace' : 'Effettua il login con email per collegare Google'}
                 >
-                  Connetti Google Workspace
+                  <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
+                       alt="Google" 
+                       style={{ width: '24px', height: '24px' }} />
                 </button>
               </div>
 
