@@ -320,8 +320,9 @@ const Settings: React.FC<SettingsProps> = ({ onClose, onSubscriptionManagement, 
                 <button
                   className="transition-all"
                   style={{
-                    width: '100%',
-                    height: '48px',
+                    width: '250px',
+                    height: '44px',
+                    margin: '0 auto',
                     background: 'white',
                     border: '1px solid #dadce0',
                     borderRadius: '8px',
@@ -346,7 +347,7 @@ const Settings: React.FC<SettingsProps> = ({ onClose, onSubscriptionManagement, 
                 >
                   <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" 
                        alt="Google" 
-                       style={{ width: '24px', height: '24px' }} />
+                       style={{ width: '20px', height: '20px' }} />
                 </button>
               </div>
 
