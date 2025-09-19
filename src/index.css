@@ -2,6 +2,11 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Utility classes */
+.hidden {
+  display: none !important;
+}
+
 /* Animazioni per la tab dinamica */
 @keyframes pulse {
   0%, 100% {

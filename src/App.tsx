@@ -646,6 +646,26 @@ function App() {
       setUploadedFiles(prev => prev.filter((_, i) => i !== index));
     };
 
+    // Handle file selection from input
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      const excelFiles = files.filter(file => 
+        file.name.toLowerCase().endsWith('.xlsx') || 
+        file.name.toLowerCase().endsWith('.xls') ||
+        file.name.toLowerCase().endsWith('.csv')
+      );
+      
+      if (excelFiles.length > 0) {
+        setUploadedFiles(prev => [...prev, ...excelFiles]);
+        console.log("File Excel selezionato, in attesa di istruzioni");
+      } else {
+        showError('Solo file Excel (.xlsx, .xls, .csv) sono supportati');
+      }
+      
+      // Reset input value
+      e.target.value = '';
+    };
+
 
 
     const handleActionClick = (actionText: string) => {
@@ -4586,7 +4606,20 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
             {/* Input Area */}
             <div className="input-section">
               <div className="input-container">
-                <button className="input-action-btn">
+                {/* Hidden file input */}
+                <input
+                  type="file"
+                  id="file-upload-input"
+                  className="hidden"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileSelect}
+                />
+                
+                <button 
+                  className="input-action-btn"
+                  onClick={() => document.getElementById('file-upload-input')?.click()}
+                  title="Carica file Excel"
+                >
                   <Plus size={18} />
                 </button>
                 
