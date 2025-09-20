@@ -2431,10 +2431,15 @@ function App() {
              window.tempExcelFile) {
           
           console.log(">>> TRIGGER EMAIL MULTIPLE ATTIVATO");
+          console.log("🔍 File disponibile:", window.tempExcelFile);
+          console.log("🔍 Nome file:", window.tempExcelFile?.name);
+          console.log("🔍 Tipo file:", typeof window.tempExcelFile);
+          console.log("🔍 È File object?", window.tempExcelFile instanceof File);
+          
           await processExcelForEmails(window.tempExcelFile);
           return; // STOP qui, non continuare
         }
-
+        
         // Check se l'utente vuole analizzare Excel per email
         console.log("CHECK 1: Contiene mail?", messageToSend.toLowerCase().includes('mail'));
         console.log("CHECK 2: Contiene email?", messageToSend.toLowerCase().includes('email'));
@@ -4057,12 +4062,20 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
     // COMMENTATO - Sostituito con MCP ExcelResource
     // Funzione per processare Excel per email
     const processExcelForEmails = async (file: File) => {
+      console.log("🔍 DEBUG processExcelForEmails:");
+      console.log("File Excel:", window.tempExcelFile);
+      console.log("Tipo file:", typeof window.tempExcelFile);
+      console.log("File parametro:", file);
+      console.log("Tipo parametro:", typeof file);
+      
       setIsProcessingEmails(true);
       setShowEmailPreview(false);
       
       try {
+        console.log("🔍 Tentativo lettura Excel...");
         // Leggi il file Excel
         const rawData = await analyzeExcelForEmails(file);
+        console.log("✅ Excel letto con successo:", rawData);
         
         // USA L'AI PER GENERARE EMAIL REALI
         const recentMessages = messages.slice(-5).map(m => `${m.isUser ? 'Utente' : 'NYRA'}: ${m.text}`).join('\n');
@@ -4146,7 +4159,9 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
         setMessages(prev => [...prev, assistantMessage]);
         
       } catch (error) {
-        console.error('Errore:', error);
+        console.error("ERRORE DETTAGLIATO:", error);
+        console.error("Stack:", error.stack);
+        console.error("Messaggio:", error.message);
         showError('Errore elaborazione');
       } finally {
         setIsProcessingEmails(false);
