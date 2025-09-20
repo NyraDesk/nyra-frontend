@@ -2422,6 +2422,142 @@ function App() {
         
         setInputMessage('');
         
+        // PRIMA prova a capire con intelligenza
+        const lowerMessage = messageToSend.toLowerCase();
+
+        // Pattern intelligenti (non solo parole chiave)
+        const wantsEmail = 
+          (lowerMessage.includes('contatt') && lowerMessage.includes('client')) ||
+          (lowerMessage.includes('scriv') && window.tempExcelFile) ||
+          (lowerMessage.includes('comunica') && window.tempExcelFile) ||
+          (lowerMessage.match(/invi\w+\s+(a|ai|per)/)) || // "invia a", "inviare ai"
+          (lowerMessage.includes('email') && !lowerMessage.includes('non')) ||
+          (lowerMessage.includes('messag') && window.tempExcelFile);
+
+        const wantsAnalysis = 
+          (lowerMessage.includes('cosa') && lowerMessage.includes('pensi')) ||
+          (lowerMessage.includes('dimmi') && window.tempExcelFile) ||
+          (lowerMessage.includes('mostra') && lowerMessage.includes('dat')) ||
+          (lowerMessage.includes('report')) ||
+          (lowerMessage.includes('riassumi'));
+
+        // USA l'intelligenza PRIMA dei trigger rigidi
+        if (window.tempExcelFile) {
+          if (wantsEmail) {
+            console.log(">>> Capito intelligentemente: vuole email");
+            // Logica semplice per email
+            try {
+              console.log(">>> Preparazione email semplificata (intelligenza)");
+              
+              // Leggi Excel
+              const reader = new FileReader();
+              reader.onload = async (e) => {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(sheet);
+                
+                // Trova chi ha email
+                const conEmail = jsonData.filter((row: any) => row.Email);
+                
+                if (conEmail.length > 0) {
+                  // Crea preview semplice
+                  const preview = `Preparazione email per ${conEmail.length} contatti:
+
+${conEmail.map((c: any, i: number) => 
+  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
+).join('\n')}
+
+Vuoi procedere con l'invio?`;
+                  
+                  // Mostra preview
+                  setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    text: preview,
+                    isUser: false,
+                    timestamp: new Date()
+                  }]);
+                  
+                  // Salva per dopo
+                  (window as any).pendingEmails = conEmail;
+                }
+              };
+              reader.readAsArrayBuffer(window.tempExcelFile);
+              
+            } catch (error) {
+              console.error("Errore semplice:", error);
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: "Errore nel preparare email. Riprova.",
+                isUser: false,
+                timestamp: new Date()
+              }]);
+            }
+            return;
+          }
+          
+          if (wantsAnalysis) {
+            console.log(">>> Capito intelligentemente: vuole analisi");
+            // Logica semplice per analisi
+            try {
+              console.log(">>> Analisi Excel semplificata (intelligenza)");
+              
+              // Leggi Excel
+              const reader = new FileReader();
+              reader.onload = async (e) => {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(sheet);
+                
+                // Analisi semplice
+                const totalRecords = jsonData.length;
+                const withEmail = jsonData.filter((row: any) => row.Email).length;
+                const columns = Object.keys(jsonData[0] || {});
+                
+                const analysis = `## Analisi del file: ${window.tempExcelFile?.name || 'Excel'}
+
+**Riepilogo:** ${totalRecords} record analizzati
+
+### Statistiche:
+- **Record totali:** ${totalRecords}
+- **Con email:** ${withEmail} (${Math.round(withEmail/totalRecords*100)}%)
+- **Colonne:** ${columns.join(', ')}
+
+### Anteprima dati:
+${jsonData.slice(0, 3).map((row: any, i: number) => 
+  `Record ${i+1}: ${Object.entries(row).map(([k,v]) => `${k}: ${v}`).join(', ')}`
+).join('\n')}
+
+### Suggerimenti:
+${withEmail > 0 ? `- Posso preparare email per ${withEmail} contatti` : '- Nessuna email trovata'}
+- Posso creare report dettagliato
+- Posso esportare dati in altri formati`;
+
+                // Mostra analisi
+                setMessages(prev => [...prev, {
+                  id: Date.now().toString(),
+                  text: analysis,
+                  isUser: false,
+                  timestamp: new Date()
+                }]);
+              };
+              reader.readAsArrayBuffer(window.tempExcelFile);
+              
+            } catch (error) {
+              console.error("Errore analisi:", error);
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: "Errore nell'analisi. Riprova.",
+                isUser: false,
+                timestamp: new Date()
+              }]);
+            }
+            return;
+          }
+        }
+
+        // SOLO SE non capisce, usa i vecchi trigger come fallback
         // PRIMO CHECK - rileva richieste email in modo intelligente
         if ((messageToSend.toLowerCase().match(/\d+\s*(mail|email)/i) ||  // "3 mail"
              messageToSend.toLowerCase().includes('bozza') ||              // "bozza"
