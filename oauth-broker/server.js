@@ -11,6 +11,7 @@ const SecurityMiddleware = require('./middleware/security');
 const authRoutes = require('./routes/auth');
 const oauthRoutes = require('./routes/oauth');
 const openRouterRoutes = require('./routes/openrouter');
+const chatRoutes = require('./routes/chat');
 
 // Initialize Express app
 const app = express();
@@ -70,6 +71,7 @@ app.get('/health', (req, res) => {
 app.use('/auth', authRoutes);
 app.use('/oauth', oauthRoutes);
 app.use('/', openRouterRoutes);
+app.use('/', chatRoutes);
 
 // Root endpoint
 app.get('/', (req, res) => {
@@ -94,6 +96,14 @@ app.get('/', (req, res) => {
       openrouter: {
         'chat': 'POST /api/openrouter',
         'health': 'GET /api/openrouter/health'
+      },
+      chat: {
+        'chat': 'POST /api/chat',
+        'health': 'GET /api/chat/health',
+        'intent-stats': 'GET /api/chat/intent-stats',
+        'test-intent': 'POST /api/chat/test-intent',
+        'cleanup': 'POST /api/chat/cleanup',
+        'add-intent': 'POST /api/chat/add-intent'
       }
     },
     security: {
