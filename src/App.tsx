@@ -2422,6 +2422,19 @@ function App() {
         
         setInputMessage('');
         
+        // PRIMO CHECK - rileva richieste email in modo intelligente
+        if ((messageToSend.toLowerCase().match(/\d+\s*(mail|email)/i) ||  // "3 mail"
+             messageToSend.toLowerCase().includes('bozza') ||              // "bozza"
+             (messageToSend.toLowerCase().includes('prepara') && 
+              messageToSend.toLowerCase().includes('mail')) ||             // "prepara mail"
+             messageToSend.toLowerCase().includes('email')) && 
+             window.tempExcelFile) {
+          
+          console.log(">>> TRIGGER EMAIL MULTIPLE ATTIVATO");
+          await processExcelForEmails(window.tempExcelFile);
+          return; // STOP qui, non continuare
+        }
+
         // Check se l'utente vuole analizzare Excel per email
         console.log("CHECK 1: Contiene mail?", messageToSend.toLowerCase().includes('mail'));
         console.log("CHECK 2: Contiene email?", messageToSend.toLowerCase().includes('email'));
