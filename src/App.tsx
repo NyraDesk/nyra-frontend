@@ -2622,6 +2622,9 @@ Se chiede "analizza", fai un'analisi completa con:
 Se chiede qualcosa di specifico, rispondi SOLO a quello.
 Usa un linguaggio professionale ma amichevole.`;
 
+              console.log("🔴 PROMPT INVIATO (PRIMO BLOCCO):", aiPrompt);
+              console.log("🔴 BLOCCO ATTIVO: window.openRouter.sendMessage()");
+
               // Inizializza OpenRouter se non esiste ancora
               if (!window.openRouter) {
                 console.log('🔴 DEBUG: Inizializzo OpenRouter');
@@ -2634,7 +2637,7 @@ Usa un linguaggio professionale ma amichevole.`;
               
               // Invia all'AI per analisi VERA
               const aiResponse = await window.openRouter.sendMessage(aiPrompt, []);
-              console.log('🔴 DEBUG: Risposta OpenRouter:', aiResponse);
+              console.log("🔴 RISPOSTA RICEVUTA (PRIMO BLOCCO):", aiResponse);
               
               // Mostra la risposta INTELLIGENTE dell'AI
               setMessages(prev => [...prev, {
@@ -2868,6 +2871,9 @@ ${(() => {
                 // DELAY per far vedere i dati
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
+                console.log("🔴 PROMPT INVIATO (SECONDO BLOCCO):", analysisPrompt);
+                console.log("🔴 BLOCCO ATTIVO: Backend API con prompt migliorato");
+
                 // CHIAMATA REALE AL BACKEND
                 const openRouterResponse = await fetch(`${backendUrl}/api/ai/chat`, {
                   method: 'POST',
@@ -2934,6 +2940,7 @@ Ricorda: professionale, strutturato, senza emoji, intelligente nel contesto.`
                 });
 
                 const aiResult = await openRouterResponse.json();
+                console.log("🔴 RISPOSTA RICEVUTA (SECONDO BLOCCO):", aiResult);
 
                 // I dati del file sono già stati mostrati nel rettangolo
 
