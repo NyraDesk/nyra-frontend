@@ -2659,7 +2659,18 @@ Per contatti email:
 2. Follow-up con Giulia Verdi per collaborazione editoriale (proposta ferma)
 3. Schedulare meeting con Elena Conti per presentazione fotografica"
 
-IMPORTANTE: Sii SPECIFICO. Usa i NOMI reali dal file. Suggerisci AZIONI concrete, non consigli generici.`;
+IMPORTANTE: Sii SPECIFICO. Usa i NOMI reali dal file. Suggerisci AZIONI concrete, non consigli generici.
+
+### AZIONE IMMEDIATA DA FARE ORA:
+Proponi UNA sola azione specifica che l'utente può fare SUBITO.
+Esempio: "Vuoi che prepari ora l'email per Laura Bianchi con proposta shooting AI? Dimmi solo 'sì' e la creo."
+
+NON dire cose generiche come "invia proposte" ma sii SPECIFICO:
+- "Preparo email per Laura Bianchi?"
+- "Creo calendario follow-up per i 6 non contattati?"
+- "Genero template email personalizzato per settore moda?"
+
+L'utente deve poter rispondere solo "sì" o "fai quello" per procedere.`;
 
               console.log("PROMPT STRATEGICO APPLICATO - v2");
               console.log("🔴 PROMPT INVIATO (PRIMO BLOCCO):", aiPrompt);
@@ -2679,6 +2690,7 @@ IMPORTANTE: Sii SPECIFICO. Usa i NOMI reali dal file. Suggerisci AZIONI concrete
               const aiResponse = await window.openRouter.sendMessage(aiPrompt, []);
               console.log("Lunghezza risposta completa:", aiResponse.length);
               console.log("🔴 RISPOSTA RICEVUTA (PRIMO BLOCCO):", aiResponse);
+              console.log("🔴 LUNGHEZZA RISPOSTA COMPLETA:", aiResponse.length);
               
               // Mostra la risposta INTELLIGENTE dell'AI
               setMessages(prev => [...prev, {

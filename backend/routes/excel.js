@@ -19,7 +19,8 @@ async function callOpenRouter(prompt) {
           role: "user", 
           content: prompt 
         }
-      ]
+      ],
+      max_tokens: 3000
     }, {
       headers: {
         'Authorization': `Bearer ${process.env.OPENROUTER_API_KEY}`,
@@ -105,6 +106,7 @@ router.post('/analyze', async (req, res) => {
 
     // Chiama OpenRouter (usa il tuo codice esistente)
     const aiResponse = await callOpenRouter(prompt);
+    console.log('Backend: Lunghezza risposta AI:', aiResponse.length);
 
     res.json({
       success: true,
