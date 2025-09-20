@@ -2,11 +2,7 @@ import * as XLSX from 'xlsx';
 import { MCP_CONFIG } from './config';
 
 export interface ExcelData {
-  Nome: string;
-  Email: string;
-  Importo: string;
-  Progetto: string;
-  Scadenza: string;
+  [key: string]: string | number | null | undefined;
 }
 
 export class ExcelResource {
@@ -20,7 +16,7 @@ export class ExcelResource {
       
       reader.onload = (e) => {
         try {
-          console.log('🔴 PARSE-EXCEL: File letto, dimensione:', e.target?.result?.byteLength);
+          console.log('🔴 PARSE-EXCEL: File letto, dimensione:', (e.target?.result as ArrayBuffer)?.byteLength);
           
           const data = e.target?.result as ArrayBuffer;
           const workbook = XLSX.read(data, { type: 'array' });
@@ -33,22 +29,48 @@ export class ExcelResource {
           const jsonData = XLSX.utils.sheet_to_json(worksheet);
           console.log('🔴 PARSE-EXCEL: JSON data raw:', jsonData.length, 'record');
           
-          // Filtra righe con "PROGETTI CLIENTI" o "Data:"
+          // Filtra righe con header o valori non validi
           const cleanData = jsonData.filter((row: any) => {
             const firstValue = Object.values(row)[0];
             return firstValue && 
                    !String(firstValue).includes('PROGETTI CLIENTI') &&
-                   !String(firstValue).includes('Data:');
+                   !String(firstValue).includes('Data:') &&
+                   !String(firstValue).includes('Nome'); // Esclude righe header
           });
 
-          // Rimappa con nomi colonne corretti
-          const finalData = cleanData.map((row: any) => ({
-            Nome: row['Nome'] || row['PROGETTI CLIENTI'] || '',
-            Email: row['Email'] || row['__EMPTY'] || '',  
-            Importo: row['Importo'] || row['__EMPTY_1'] || '',
-            Progetto: row['Progetto'] || row['__EMPTY_2'] || '',
-            Scadenza: row['Scadenza'] || row['__EMPTY_3'] || ''
-          })).filter((row: any) => row.Nome !== 'Nome' && row.Nome !== '');
+          // PARSING FLESSIBILE: Usa i campi che ci sono, metti default per quelli mancanti
+          const finalData = cleanData.map((row: any) => {
+            const processedRow: ExcelData = {};
+            
+            // Processa TUTTI i campi presenti nel file
+            Object.keys(row).forEach(key => {
+              const value = row[key];
+              if (value !== null && value !== undefined && value !== '') {
+                processedRow[key] = value;
+              }
+            });
+            
+            // Aggiungi campi con nomi standard se mancanti (per compatibilità)
+            if (!processedRow['Nome'] && !processedRow['nome']) {
+              processedRow['Nome'] = processedRow['PROGETTI CLIENTI'] || '';
+            }
+            if (!processedRow['Email'] && !processedRow['email']) {
+              processedRow['Email'] = processedRow['__EMPTY'] || '';
+            }
+            
+            // Valori default per campi opzionali
+            if (!processedRow['Importo'] && !processedRow['importo']) {
+              processedRow['Importo'] = 0;
+            }
+            if (!processedRow['Scadenza'] && !processedRow['scadenza']) {
+              processedRow['Scadenza'] = 'Non specificata';
+            }
+            
+            return processedRow;
+          }).filter((row: ExcelData) => {
+            // Mantieni solo righe con almeno Nome o Email
+            return row['Nome'] || row['nome'] || row['Email'] || row['email'];
+          });
 
           console.log('🔴 PARSE-EXCEL: Dati finali:', finalData.length, 'record');
           console.log('🔴 PARSE-EXCEL: Primo record finale:', finalData[0]);
