@@ -180,7 +180,7 @@ export class OpenRouterConnector {
       const requestBody = {
         model,
         messages: contextMessages,
-        max_tokens: 1000,
+        max_tokens: 2000,
         temperature: 0.7,
       };
       
@@ -196,7 +196,7 @@ export class OpenRouterConnector {
           messages: contextMessages,
           model,
           temperature: 0.7,
-          max_tokens: 1000
+          max_tokens: 2000
         })
       });
 

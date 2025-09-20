@@ -2677,6 +2677,7 @@ IMPORTANTE: Sii SPECIFICO. Usa i NOMI reali dal file. Suggerisci AZIONI concrete
               
               // Invia all'AI per analisi VERA
               const aiResponse = await window.openRouter.sendMessage(aiPrompt, []);
+              console.log("Lunghezza risposta completa:", aiResponse.length);
               console.log("🔴 RISPOSTA RICEVUTA (PRIMO BLOCCO):", aiResponse);
               
               // Mostra la risposta INTELLIGENTE dell'AI
