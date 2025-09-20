@@ -4571,7 +4571,9 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
             {messages.length > 0 && (
               <div className="messages-container">
                 <div className="messages">
-                  {messages.map((message, index) => (
+                  {messages.map((message, index) => {
+                    console.log("LUNGHEZZA MESSAGGIO DA MOSTRARE:", message.text.length);
+                    return (
                     <div key={message.id} className={`message ${message.isUser ? 'user' : 'ai'}`}>
                       {message.isUser ? (
                         <div className="message-content">
@@ -4608,7 +4610,8 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
                         />
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                   
                   {/* Email Preview Component */}
                   {showEmailPreview && emailPreviewData && (
