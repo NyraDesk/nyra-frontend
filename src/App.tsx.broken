@@ -2385,16 +2385,12 @@ function App() {
     */
 
     const handleSendMessage = async () => {
-      console.log("handleSendMessage chiamata");
+      console.log("🧠 NYRA INTELLIGENTE - Analisi completa del contesto");
       console.log("inputMessage:", inputMessage);
       console.log("uploadedFiles:", uploadedFiles);
       
-      // Gestione Excel - solo con verbi di azione
-      if ((inputMessage.toLowerCase().includes('crea') && inputMessage.toLowerCase().includes('fattura')) ||
-          inputMessage.toLowerCase().includes('genera') ||
-          inputMessage.toLowerCase().includes('invia') ||
-          inputMessage.toLowerCase().includes('prepara')) {
         const messageToSend = inputMessage.trim();
+      if (!messageToSend) return;
         
         // Aggiungi messaggio utente
         const userMessage: Message = { 
@@ -2406,6 +2402,7 @@ function App() {
         };
         
         setMessages(prev => [...prev, userMessage]);
+      setInputMessage('');
         
         // Nascondi il messaggio di benvenuto quando viene inviato il primo messaggio
         if (messages.length === 0) {
@@ -2420,133 +2417,308 @@ function App() {
           }));
         }
         
-        setInputMessage('');
-        
-        // PRIMO CHECK - rileva richieste email in modo intelligente
-        if ((messageToSend.toLowerCase().match(/\d+\s*(mail|email)/i) ||  // "3 mail"
-             messageToSend.toLowerCase().includes('bozza') ||              // "bozza"
-             (messageToSend.toLowerCase().includes('prepara') && 
-              messageToSend.toLowerCase().includes('mail')) ||             // "prepara mail"
-             messageToSend.toLowerCase().includes('email')) && 
-             window.tempExcelFile) {
-          
-          console.log(">>> TRIGGER EMAIL MULTIPLE ATTIVATO");
-          console.log("🔍 File disponibile:", window.tempExcelFile);
-          console.log("🔍 Nome file:", window.tempExcelFile?.name);
-          console.log("🔍 Tipo file:", typeof window.tempExcelFile);
-          console.log("🔍 È File object?", window.tempExcelFile instanceof File);
-          
-          // Logica semplice per email
+      // 🧠 NYRA INTELLIGENTE - Analisi completa del contesto
+      try {
+        // Prepara dati Excel se disponibili
+        let excelData = null;
+        if (window.tempExcelFile) {
           try {
-            console.log(">>> Preparazione email semplificata");
-            
-            // Leggi Excel
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-              const data = new Uint8Array(e.target?.result as ArrayBuffer);
-              const workbook = XLSX.read(data, {type: 'array'});
-              const sheet = workbook.Sheets[workbook.SheetNames[0]];
-              const jsonData = XLSX.utils.sheet_to_json(sheet);
-              
-              // Trova chi ha email
-              const conEmail = jsonData.filter((row: any) => row.Email);
-              
-              if (conEmail.length > 0) {
-                // Crea preview semplice
-                const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
-                
-                // Mostra preview
-                setMessages(prev => [...prev, {
-                  id: Date.now().toString(),
-                  text: preview,
-                  isUser: false,
-                  timestamp: new Date()
-                }]);
-                
-                // Salva per dopo
-                (window as any).pendingEmails = conEmail;
-              }
-            };
-            reader.readAsArrayBuffer(window.tempExcelFile);
-            
+            const excelResource = new ExcelResource();
+            const result = await excelResource.analyze(window.tempExcelFile);
+            excelData = result.data;
           } catch (error) {
-            console.error("Errore semplice:", error);
-            setMessages(prev => [...prev, {
-              id: Date.now().toString(),
-              text: "Errore nel preparare email. Riprova.",
-              isUser: false,
-              timestamp: new Date()
-            }]);
+            console.warn("Errore lettura Excel:", error);
           }
-          return; // STOP qui, non continuare
+        }
+
+        const contextPrompt = `
+Tu sei NYRA. Hai queste capacità:
+- Analizzare file Excel caricati
+- Preparare e inviare email (singole o multiple)
+- Creare documenti e report
+- Gestire calendario e promemoria
+
+CONTESTO ATTUALE:
+- File Excel caricato: ${!!window.tempExcelFile}
+- Nome file: ${window.tempExcelFile?.name || 'nessuno'}
+- Dati disponibili: ${excelData ? JSON.stringify(excelData.slice(0, 3)) : 'nessuno'}
+- Conversazione precedente: ${messages.slice(-3).map(m => `${m.isUser ? 'Utente' : 'NYRA'}: ${m.text}`).join('\n')}
+
+L'utente dice: "${messageToSend}"
+
+ANALIZZA e DECIDI:
+1. Cosa vuole l'utente?
+2. Quale azione devo eseguire?
+3. Ho bisogno di più informazioni?
+
+Rispondi SOLO con JSON:
+{
+  "intent": "email|analysis|create|chat",
+  "action": "prepare_email|send_email|analyze_data|create_document|normal_chat",
+  "targets": ["se applicabile"],
+  "needs_confirmation": true/false,
+  "response": "cosa dire all'utente"
+}
+`;
+
+        console.log("🧠 Invio contesto completo a Claude per decisione intelligente");
+        
+        // Inizializza OpenRouter se non esiste
+        if (!window.openRouter) {
+          const { OpenRouterConnector } = await import('./services/openrouter');
+          window.openRouter = new OpenRouterConnector();
         }
         
-        // Check se l'utente vuole analizzare Excel per email
-        console.log("CHECK 1: Contiene mail?", messageToSend.toLowerCase().includes('mail'));
-        console.log("CHECK 2: Contiene email?", messageToSend.toLowerCase().includes('email'));
-        console.log("CHECK 3: Uploaded files length:", uploadedFiles.length);
+        const aiDecision = await window.openRouter.sendMessage(contextPrompt, []);
+        console.log("🧠 Decisione AI ricevuta:", aiDecision);
         
-        if ((messageToSend.toLowerCase().includes('email') || 
-             messageToSend.toLowerCase().includes('mail') ||
-             messageToSend.toLowerCase().includes('invia') ||
+        let decision;
+        try {
+          // Estrai JSON dalla risposta
+          const jsonMatch = aiDecision.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            decision = JSON.parse(jsonMatch[0]);
+          } else {
+            throw new Error("Nessun JSON trovato nella risposta");
+          }
+        } catch (parseError) {
+          console.error("Errore parsing decisione AI:", parseError);
+          decision = {
+            intent: "chat",
+            action: "normal_chat", 
+            response: aiDecision
+          };
+        }
+        
+        console.log("🧠 Decisione finalizzata:", decision);
+        
+        // Esegui l'azione decisa da Claude
+        switch(decision.action) {
+          case 'prepare_email':
+          case 'send_email':
+            if (window.tempExcelFile) {
+              console.log("📧 Preparazione email multiple");
+              await processExcelForEmails(window.tempExcelFile);
+            } else {
+              // Chat normale se non c'è file Excel
+              const chatResponse: Message = {
+                id: getUniqueMessageId(),
+                text: "Per preparare email ho bisogno di un file Excel. Carica prima il file e poi chiedi di preparare le email.",
+                isUser: false,
+                timestamp: new Date(),
+                type: 'normal'
+              };
+              setMessages(prev => [...prev, chatResponse]);
+            }
+            break;
+            
+          case 'analyze_data':
+            if (window.tempExcelFile) {
+              console.log("📊 Analisi dati Excel");
+              const excelResource = new ExcelResource();
+              const result = await excelResource.analyze(window.tempExcelFile);
+              
+              const aiPrompt = `Sei NYRA, assistente AI strategico per analisi business.
+
+STILE DI OUTPUT RICHIESTO:
+- Inizia SEMPRE con un ALERT se ci sono opportunità perse
+- Usa ## per titoli principali
+- Usa **grassetto** per numeri e percentuali chiave
+- Fornisci SEMPRE azioni concrete numerate
+- Linguaggio diretto e business-oriented
+- ZERO emoji
+
+I dati del file Excel sono:
+${JSON.stringify(result.data)}
+
+L'utente chiede: "${messageToSend}"
+
+STRUTTURA OBBLIGATORIA DELLA RISPOSTA:
+
+## Analisi Strategica - ${window.tempExcelFile.name}
+
+**ALERT:** [Evidenzia subito il problema/opportunità principale]
+
+### AZIONI IMMEDIATE (cosa fare SUBITO):
+1. [Azione specifica con nome cliente/progetto]
+2. [Azione specifica con nome cliente/progetto]
+3. [Azione specifica con nome cliente/progetto]
+
+### METRICHE CHIAVE:
+- **[Metrica]:** [Valore] - [Implicazione]
+- **[Metrica]:** [Valore] - [Implicazione]
+
+### OPPORTUNITÀ IDENTIFICATE:
+- [Opportunità concreta basata sui dati]
+- [Cross-selling o upselling possibile]
+
+### PIANO 3 GIORNI:
+**Giorno 1:** [Azione specifica]
+**Giorno 2:** [Azione specifica]
+**Giorno 3:** [Azione specifica]
+
+### AZIONE IMMEDIATA DA FARE ORA:
+Proponi UNA sola azione specifica che l'utente può fare SUBITO.
+Esempio: "Vuoi che prepari ora l'email per Laura Bianchi con proposta shooting AI? Dimmi solo 'sì' e la creo."
+
+NON dire cose generiche come "invia proposte" ma sii SPECIFICO:
+- "Preparo email per Laura Bianchi?"
+- "Creo calendario follow-up per i 6 non contattati?"
+- "Genero template email personalizzato per settore moda?"
+
+L'utente deve poter rispondere solo "sì" o "fai quello" per procedere.
+
+IMPORTANTE: Sii SPECIFICO. Usa i NOMI reali dal file. Suggerisci AZIONI concrete, non consigli generici.`;
+
+              const aiResponse = await window.openRouter.sendMessage(aiPrompt, []);
+              
+              const analysisResponse: Message = {
+                id: getUniqueMessageId(),
+                text: aiResponse,
+                isUser: false,
+                timestamp: new Date(),
+                type: 'normal'
+              };
+              setMessages(prev => [...prev, analysisResponse]);
+            } else {
+              const chatResponse: Message = {
+                id: getUniqueMessageId(),
+                text: "Per analizzare dati ho bisogno di un file Excel. Carica prima il file e poi chiedi l'analisi.",
+                isUser: false,
+                timestamp: new Date(),
+                type: 'normal'
+              };
+              setMessages(prev => [...prev, chatResponse]);
+            }
+            break;
+            
+          case 'create_document':
+            // Logica per creare documenti (Excel, PDF, etc.)
+            const documentResponse: Message = {
+              id: getUniqueMessageId(),
+              text: decision.response || "Creo il documento richiesto...",
+              isUser: false,
+              timestamp: new Date(),
+              type: 'normal'
+            };
+            setMessages(prev => [...prev, documentResponse]);
+            break;
+            
+          case 'normal_chat':
+          default:
+            // Chat normale con Claude
+            const chatResponse: Message = {
+              id: getUniqueMessageId(),
+              text: decision.response || "Non sono sicura di cosa vuoi fare. Puoi essere più specifico?",
+              isUser: false,
+              timestamp: new Date(),
+              type: 'normal'
+            };
+            setMessages(prev => [...prev, chatResponse]);
+            break;
+        }
+        
+      } catch (error) {
+        console.error("❌ Errore in NYRA intelligente:", error);
+        
+        const errorResponse: Message = {
+          id: getUniqueMessageId(),
+          text: "Mi dispiace, ho riscontrato un errore. Puoi riprovare?",
+          isUser: false,
+          timestamp: new Date(),
+          type: 'normal'
+        };
+        setMessages(prev => [...prev, errorResponse]);
+      }
+    };
+
+    // Funzione per inviare le email
+    const handleSendEmails = async (selectedIndexes: number[], modifiedEmails?: any[]) => {
+      if (!emailPreviewData) return;
+      
+      try {
+        const emailsToSend = selectedIndexes.map(i => 
+          modifiedEmails ? modifiedEmails[i] : emailPreviewData.categorizedEmails[i]
+        );
+        
+        // INVIO REALE VIA GMAIL DIRETTO
+        console.log('📧 Invio email via Gmail diretto:', emailsToSend);
+        
+        // Importa il servizio Gmail diretto
+        const { gmailDirectService } = await import('./services/gmailDirectService');
+        
+        // Invia ogni email via Gmail diretto
+        for (const emailData of emailsToSend) {
+          try {
+            console.log('🚀 Invio email a:', emailData.email);
+            await gmailDirectService.sendEmail(emailData);
+            console.log('✅ Email inviata con successo a:', emailData.email);
+          } catch (error) {
+            console.error('❌ Errore invio email a', emailData.email, ':', error);
+            throw error; // Rilancia l'errore per gestirlo
+          }
+        }
+        
+        showSuccess(`${emailsToSend.length} email inviate con successo via Gmail!`);
+        setShowEmailPreview(false);
+        setEmailPreviewData(null);
+        
+      } catch (error) {
+        console.error('❌ Errore invio email:', error);
+        showError('Errore durante l\'invio delle email');
+      } finally {
+        setIsProcessingEmails(false);
+        setUploadedFiles([]);
+      }
+    };
+
+    // Auto-scroll effect per mantenere la chat sempre in fondo
+    useEffect(() => {
+      if (messages.length > 0) {
+        setTimeout(() => {
+          const messagesContainer = document.querySelector('.messages-container');
+          if (messagesContainer) {
+            messagesContainer.scrollTo({
+              top: messagesContainer.scrollHeight,
+              behavior: 'smooth'
+            });
+          }
+        }, 100);
+      }
+    }, [messages.length, activeConversationId, appClock]);
+
+    return (
+      <div className="app">
+        {/* Toast System */}
+        {toasts.map(toast => (
+          <Toast
+            key={toast.id}
+            id={toast.id}
+            message={toast.message}
+            type={toast.type}
+            onClose={removeToast}
+            duration={toast.duration}
+          />
+        ))}
+        
+        {/* Welcome Screen */}
+        {showWelcome && (
+          <div className="welcome-screen">
+            <div className="unified-welcome-container">
+              {/* Left Column - Welcome Content */}
+              <div className="unified-welcome-left">
+                <h1 className="unified-welcome-title">Welcome to NYRA</h1>
+                <p className="unified-welcome-subtitle">
+                  Your personal AI assistant to write, plan, organize and automate on your computer.
+                </p>
+                
+                <div className="unified-welcome-features">
+                  <div className="unified-welcome-feature">
              messageToSend.toLowerCase().includes('prepara')) && 
             uploadedFiles.length > 0 &&
             uploadedFiles[0].name.includes('.xls')) {
           
-          // Logica semplice per email (vecchio controllo)
-          try {
-            console.log(">>> Preparazione email semplificata (vecchio controllo)");
-            
-            // Leggi Excel
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-              const data = new Uint8Array(e.target?.result as ArrayBuffer);
-              const workbook = XLSX.read(data, {type: 'array'});
-              const sheet = workbook.Sheets[workbook.SheetNames[0]];
-              const jsonData = XLSX.utils.sheet_to_json(sheet);
-              
-              // Trova chi ha email
-              const conEmail = jsonData.filter((row: any) => row.Email);
-              
-              if (conEmail.length > 0) {
-                // Crea preview semplice
-                const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
-                
-                // Mostra preview
-                setMessages(prev => [...prev, {
-                  id: Date.now().toString(),
-                  text: preview,
-                  isUser: false,
-                  timestamp: new Date()
-                }]);
-                
-                // Salva per dopo
-                (window as any).pendingEmails = conEmail;
-              }
-            };
-            reader.readAsArrayBuffer(uploadedFiles[0]);
-            
-          } catch (error) {
-            console.error("Errore semplice:", error);
-            setMessages(prev => [...prev, {
-              id: Date.now().toString(),
-              text: "Errore nel preparare email. Riprova.",
-              isUser: false,
-              timestamp: new Date()
-            }]);
-          }
+          await processExcelForEmails(uploadedFiles[0]);
           console.log("Uscita 1: Processo Excel per email (vecchio controllo)");
           return;
         }
@@ -3279,94 +3451,11 @@ Oppure carica un nuovo file Excel per iniziare.`,
           
           if (window.tempExcelData && window.tempExcelData.length > 0) {
             // Genera email con i dati già analizzati
-            // Logica semplice per email con dati salvati
-            try {
-              console.log(">>> Preparazione email semplificata (dati salvati)");
-              
-              // Trova chi ha email
-              const conEmail = window.tempExcelData.filter((row: any) => row.Email);
-              
-              if (conEmail.length > 0) {
-                // Crea preview semplice
-                const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
-                
-                // Mostra preview
-                setMessages(prev => [...prev, {
-                  id: Date.now().toString(),
-                  text: preview,
-                  isUser: false,
-                  timestamp: new Date()
-                }]);
-                
-                // Salva per dopo
-                (window as any).pendingEmails = conEmail;
-              }
-              window.tempExcelData = null;
-              
-            } catch (error) {
-              console.error("Errore semplice:", error);
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: "Errore nel preparare email. Riprova.",
-                isUser: false,
-                timestamp: new Date()
-              }]);
-            }
+            await processExcelForEmails(window.tempExcelData);
+            window.tempExcelData = null;
           } else {
             // Se non ci sono dati salvati, usa il file originale
-            try {
-              console.log(">>> Preparazione email semplificata (file originale)");
-              
-              // Leggi Excel
-              const reader = new FileReader();
-              reader.onload = async (e) => {
-                const data = new Uint8Array(e.target?.result as ArrayBuffer);
-                const workbook = XLSX.read(data, {type: 'array'});
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = XLSX.utils.sheet_to_json(sheet);
-                
-                // Trova chi ha email
-                const conEmail = jsonData.filter((row: any) => row.Email);
-                
-                if (conEmail.length > 0) {
-                  // Crea preview semplice
-                  const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
-                  
-                  // Mostra preview
-                  setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    text: preview,
-                    isUser: false,
-                    timestamp: new Date()
-                  }]);
-                  
-                  // Salva per dopo
-                  (window as any).pendingEmails = conEmail;
-                }
-              };
-              reader.readAsArrayBuffer(file);
-              
-            } catch (error) {
-              console.error("Errore semplice:", error);
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: "Errore nel preparare email. Riprova.",
-                isUser: false,
-                timestamp: new Date()
-              }]);
-            }
+            await processExcelForEmails(file);
           }
           
           setInputMessage('');
@@ -3422,44 +3511,8 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
             messageToSend.toLowerCase().includes('invia') ||
             messageToSend.toLowerCase().includes('prepara')) {
           
-          // Genera email con i dati in memoria - logica semplice
-          try {
-            console.log(">>> Preparazione email semplificata (dati in memoria)");
-            
-            // Trova chi ha email
-            const conEmail = dataToUse.filter((row: any) => row.Email);
-            
-            if (conEmail.length > 0) {
-              // Crea preview semplice
-              const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
-              
-              // Mostra preview
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: preview,
-                isUser: false,
-                timestamp: new Date()
-              }]);
-              
-              // Salva per dopo
-              (window as any).pendingEmails = conEmail;
-            }
-            
-          } catch (error) {
-            console.error("Errore semplice:", error);
-            setMessages(prev => [...prev, {
-              id: Date.now().toString(),
-              text: "Errore nel preparare email. Riprova.",
-              isUser: false,
-              timestamp: new Date()
-            }]);
-          }
+          // Genera email con i dati in memoria
+          await processExcelForEmails(dataToUse);
           setInputMessage('');
           return;
         }
