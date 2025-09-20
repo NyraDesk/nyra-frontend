@@ -2352,7 +2352,7 @@ function App() {
             const workbook = XLSX.read(data, { type: 'binary' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-               const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
                // Rimuovi righe con "PROGETTI CLIENTI" o "Data:"
                const cleanData = jsonData.filter((row: any) => {
@@ -2423,6 +2423,10 @@ function App() {
         setInputMessage('');
         
         // Check se l'utente vuole analizzare Excel per email
+        console.log("CHECK 1: Contiene mail?", messageToSend.toLowerCase().includes('mail'));
+        console.log("CHECK 2: Contiene email?", messageToSend.toLowerCase().includes('email'));
+        console.log("CHECK 3: Uploaded files length:", uploadedFiles.length);
+        
         if ((messageToSend.toLowerCase().includes('email') || 
              messageToSend.toLowerCase().includes('mail') ||
              messageToSend.toLowerCase().includes('invia') ||
@@ -2591,6 +2595,9 @@ Rispondi con:
         }
         
         // Se scrive "analisi" o "analizza" - USA AI INTELLIGENTE
+        console.log("CHECK 4: Contiene analisi?", messageToSend.toLowerCase().includes('analisi'));
+        console.log("CHECK 5: Contiene analizza?", messageToSend.toLowerCase().includes('analizza'));
+        
         if (messageToSend.toLowerCase().includes('analisi') || 
             messageToSend.toLowerCase().includes('analizza')) {
           
@@ -2688,9 +2695,7 @@ L'utente deve poter rispondere solo "sì" o "fai quello" per procedere.`;
               
               // Invia all'AI per analisi VERA
               const aiResponse = await window.openRouter.sendMessage(aiPrompt, []);
-              console.log("Lunghezza risposta completa:", aiResponse.length);
               console.log("🔴 RISPOSTA RICEVUTA (PRIMO BLOCCO):", aiResponse);
-              console.log("🔴 LUNGHEZZA RISPOSTA COMPLETA:", aiResponse.length);
               
               // Mostra la risposta INTELLIGENTE dell'AI
               setMessages(prev => [...prev, {
@@ -2845,7 +2850,7 @@ IMPORTANTE: Usa SOLO i dati reali dal file. Non inventare nulla.
 Concentrati su AZIONI PRATICHE che l'utente può fare subito.
 
 TERMINA sempre con una domanda diretta su cosa fare.
-`;
+              `;
               console.log('🔴 PROMPT COMPLETO INVIATO:', analysisPrompt);
               
               // Verifica se il backend è disponibile
@@ -2926,7 +2931,7 @@ ${(() => {
                 
                 console.log("🔴 PROMPT INVIATO (SECONDO BLOCCO):", analysisPrompt);
                 console.log("🔴 BLOCCO ATTIVO: Backend API con prompt migliorato");
-
+                
                 // CHIAMATA REALE AL BACKEND
                 const openRouterResponse = await fetch(`${backendUrl}/api/ai/chat`, {
                   method: 'POST',
@@ -3152,6 +3157,9 @@ Oppure carica un nuovo file Excel per iniziare.`,
         */
 
         // Se scrive "genera" o "email" con file - USA DATI SALVATI
+        console.log("CHECK 6: Email trigger con file - Contiene email?", messageToSend.toLowerCase().includes('email'));
+        console.log("CHECK 7: Email trigger con file - Contiene mail?", messageToSend.toLowerCase().includes('mail'));
+        
         if (messageToSend.toLowerCase().includes('email') || 
             messageToSend.toLowerCase().includes('genera') ||
             messageToSend.toLowerCase().includes('invia') ||
@@ -3210,6 +3218,9 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
           
           return;
         }
+        
+        console.log("CHECK 8: Email trigger senza file - Contiene email?", messageToSend.toLowerCase().includes('email'));
+        console.log("CHECK 9: Email trigger senza file - Contiene mail?", messageToSend.toLowerCase().includes('mail'));
         
         if (messageToSend.toLowerCase().includes('email') || 
             messageToSend.toLowerCase().includes('genera') ||
@@ -4031,7 +4042,6 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
     };
 
     // COMMENTATO - Sostituito con MCP ExcelResource
-    /*
     // Funzione per processare Excel per email
     const processExcelForEmails = async (file: File) => {
       setIsProcessingEmails(true);
@@ -4130,7 +4140,6 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
         setUploadedFiles([]);
       }
     };
-    */
 
     // Funzione per inviare le email
     const handleSendEmails = async (selectedIndexes: number[], modifiedEmails?: any[]) => {
@@ -4584,7 +4593,6 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
               <div className="messages-container">
                 <div className="messages">
                   {messages.map((message, index) => {
-                    console.log("LUNGHEZZA MESSAGGIO DA MOSTRARE:", message.text.length);
                     return (
                     <div key={message.id} className={`message ${message.isUser ? 'user' : 'ai'}`}>
                       {message.isUser ? (
