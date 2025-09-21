@@ -40,20 +40,10 @@ export default function SettingsOverlay({ isOpen, onClose, language, onLanguageC
           return;
         }
         
-        // Solo se ci sono token locali, controlla il backend con proxy CORS
-        const proxyUrl = `https://cors-anywhere.herokuapp.com/${BROKER}/auth/google/status?userId=${encodeURIComponent(userId)}`;
-        console.log(`[FRONTEND] Using CORS proxy for status: ${proxyUrl}`);
-        
-        const r = await fetch(proxyUrl, { 
-          credentials: "include",
-          headers: {
-            'X-Requested-With': 'XMLHttpRequest'
-          }
-        });
-        if (r.ok) {
-          const j = await r.json();
-          setStatus({ gmail: !!j.gmail?.connected, gcal: !!j.gcal?.connected });
-        }
+        // FORZA DISCONNESSIONE se non ci sono token locali
+        console.log('[FRONTEND] No local tokens - forcing disconnected state');
+        setStatus({ gmail: false, gcal: false });
+        return;
       } finally { 
         // Assicurati che lo stato di loading sia visibile per almeno 500ms
         const elapsedTime = Date.now() - startTime;
