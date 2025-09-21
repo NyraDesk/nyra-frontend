@@ -47,7 +47,8 @@ app.use((req, res, next) => {
     'http://localhost:5173',
     'http://localhost:3000',
     'https://nyra-frontend-nyradesks-projects.vercel.app',
-    'https://nyra-frontend.vercel.app'
+    'https://nyra-frontend.vercel.app',
+    'https://nyra-frontend-beta.vercel.app'  // DOMINIO CORRETTO DAL LOG
   ];
   
   const origin = req.headers.origin;
@@ -72,7 +73,8 @@ app.use(cors({
     'http://localhost:5173',
     'http://localhost:3000',
     'https://nyra-frontend-nyradesks-projects.vercel.app',
-    'https://nyra-frontend.vercel.app'
+    'https://nyra-frontend.vercel.app',
+    'https://nyra-frontend-beta.vercel.app'  // DOMINIO CORRETTO DAL LOG
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
