@@ -82,6 +82,11 @@ class SecurityMiddleware {
       process.env.CORS_ORIGIN
     ].filter(Boolean); // Remove undefined values
 
+    console.log('🔧 CORS Configuration:', {
+      allowedOrigins,
+      timestamp: new Date().toISOString()
+    });
+
     return {
       origin: allowedOrigins,
       credentials: true,
