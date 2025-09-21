@@ -2628,9 +2628,9 @@ Il Team NYRA`;
       if (!message && window.tempExcelFile) {
         console.log("📁 FILE EXCEL RILEVATO - PROCESSAMENTO AUTOMATICO");
         
-        // PULISCI SUBITO la textarea e l'icona del file
+        // PULISCI SOLO la textarea, NON i file
       setInputMessage('');
-        setUploadedFiles([]);
+        // setUploadedFiles([]); // NON pulire i file per mantenere il contesto
         
         // MOSTRA BARRA DI PROGRESSO
         setIsProcessingEmails(true);
