@@ -41,7 +41,32 @@ app.use(helmet({
   }
 }));
 
-// CORS configuration - SIMPLIFIED
+// CORS configuration - MANUAL HEADERS
+app.use((req, res, next) => {
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'http://localhost:3000',
+    'https://nyra-frontend-nyradesks-projects.vercel.app',
+    'https://nyra-frontend.vercel.app'
+  ];
+  
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header('Access-Control-Allow-Origin', origin);
+  }
+  
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
+
+// Fallback CORS
 app.use(cors({
   origin: [
     'http://localhost:5173',
