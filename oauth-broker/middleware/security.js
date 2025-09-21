@@ -74,8 +74,16 @@ class SecurityMiddleware {
 
   // CORS configuration
   getCorsOptions() {
+    const allowedOrigins = [
+      'http://localhost:5173',
+      'http://localhost:3000',
+      'https://nyra-frontend-nyradesks-projects.vercel.app',
+      'https://nyra-frontend.vercel.app',
+      process.env.CORS_ORIGIN
+    ].filter(Boolean); // Remove undefined values
+
     return {
-      origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+      origin: allowedOrigins,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
