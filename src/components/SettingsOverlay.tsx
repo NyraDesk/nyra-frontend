@@ -40,8 +40,16 @@ export default function SettingsOverlay({ isOpen, onClose, language, onLanguageC
           return;
         }
         
-        // Solo se ci sono token locali, controlla il backend
-        const r = await fetch(`${BROKER}/auth/google/status?userId=${encodeURIComponent(userId)}`, { credentials: "include" });
+        // Solo se ci sono token locali, controlla il backend con proxy CORS
+        const proxyUrl = `https://cors-anywhere.herokuapp.com/${BROKER}/auth/google/status?userId=${encodeURIComponent(userId)}`;
+        console.log(`[FRONTEND] Using CORS proxy for status: ${proxyUrl}`);
+        
+        const r = await fetch(proxyUrl, { 
+          credentials: "include",
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest'
+          }
+        });
         if (r.ok) {
           const j = await r.json();
           setStatus({ gmail: !!j.gmail?.connected, gcal: !!j.gcal?.connected });
@@ -62,8 +70,11 @@ export default function SettingsOverlay({ isOpen, onClose, language, onLanguageC
       localStorage.removeItem(`nyra_oauth_${userId}`);
       console.log(`[FRONTEND] Cleared old tokens for user: ${userId}`);
       
-      const url = `${BROKER}/auth/google/start?userId=${encodeURIComponent(userId)}`;
-      const w = window.open(url, "nyra_google_oauth", "width=520,height=680");
+      // TEMPORARY FIX: Use CORS proxy to bypass Render issues
+      const proxyUrl = `https://cors-anywhere.herokuapp.com/${BROKER}/auth/google/start?userId=${encodeURIComponent(userId)}`;
+      console.log(`[FRONTEND] Using CORS proxy: ${proxyUrl}`);
+      
+      const w = window.open(proxyUrl, "nyra_google_oauth", "width=520,height=680");
       const onMsg = (e: MessageEvent) => {
         if (e.data === "nyra:google:connected") {
           refresh();
