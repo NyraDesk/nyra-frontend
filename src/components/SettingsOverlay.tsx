@@ -24,21 +24,44 @@ export default function SettingsOverlay({ isOpen, onClose, language, onLanguageC
 
   // Google Integrations Section Component
   function GoogleIntegrationsSection({ userId }: { userId: string }) {
-    const [loading, setLoading] = useState(false);
-    const [status, setStatus] = useState<{ gmail?: boolean; gcal?: boolean }>({});
+    const [loading, setLoading] = useState(true); // Inizia con loading = true
+    const [status, setStatus] = useState<{ gmail?: boolean; gcal?: boolean }>({ gmail: false, gcal: false });
 
     async function refresh() {
       setLoading(true);
+      const startTime = Date.now(); // Inizia il timer
+      
       try {
+        // CONTROLLA PRIMA IL LOCAL STORAGE
+        const storedTokens = localStorage.getItem(`nyra_oauth_${userId}`);
+        if (!storedTokens) {
+          console.log('[FRONTEND] No stored tokens found - forcing disconnected state');
+          setStatus({ gmail: false, gcal: false });
+          return;
+        }
+        
+        // Solo se ci sono token locali, controlla il backend
         const r = await fetch(`${BROKER}/auth/google/status?userId=${encodeURIComponent(userId)}`, { credentials: "include" });
         if (r.ok) {
           const j = await r.json();
           setStatus({ gmail: !!j.gmail?.connected, gcal: !!j.gcal?.connected });
         }
-      } finally { setLoading(false); }
+      } finally { 
+        // Assicurati che lo stato di loading sia visibile per almeno 500ms
+        const elapsedTime = Date.now() - startTime;
+        const remainingTime = 500 - elapsedTime; // 500ms minimo
+        if (remainingTime > 0) {
+          await new Promise(resolve => setTimeout(resolve, remainingTime));
+        }
+        setLoading(false); 
+      }
     }
 
     function connectWorkspace() {
+      // Pulisci i token vecchi prima di riconnettere
+      localStorage.removeItem(`nyra_oauth_${userId}`);
+      console.log(`[FRONTEND] Cleared old tokens for user: ${userId}`);
+      
       const url = `${BROKER}/auth/google/start?userId=${encodeURIComponent(userId)}`;
       const w = window.open(url, "nyra_google_oauth", "width=520,height=680");
       const onMsg = (e: MessageEvent) => {
@@ -52,7 +75,20 @@ export default function SettingsOverlay({ isOpen, onClose, language, onLanguageC
       setTimeout(() => { refresh(); window.removeEventListener("message", onMsg); if (w && !w.closed) w.close(); }, 10000);
     }
 
-    useEffect(() => { refresh(); }, [userId]);
+    useEffect(() => { 
+      // PULISCI TUTTI I TOKEN VECCHI ALL'AVVIO
+      localStorage.removeItem(`nyra_oauth_${userId}`);
+      console.log(`[FRONTEND] FORCED CLEANUP: Removed all tokens for ${userId}`);
+      
+      // FORZA DISCONNESSIONE INIZIALE
+      setStatus({ gmail: false, gcal: false });
+      setLoading(true);
+      
+      // Poi fai il controllo (che ora troverà sempre "No stored tokens")
+      setTimeout(() => {
+        refresh();
+      }, 100);
+    }, [userId]);
 
     return (
       <div className="space-y-3">
@@ -76,12 +112,26 @@ export default function SettingsOverlay({ isOpen, onClose, language, onLanguageC
               </span>
             </div>
 
-            <button
-              className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium text-white bg-green-600 hover:bg-green-700 active:bg-green-800 transition-colors"
-              onClick={connectWorkspace}
-            >
-              Connetti Google Workspace
-            </button>
+            <div className="flex gap-2">
+              <button
+                className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium text-white bg-green-600 hover:bg-green-700 active:bg-green-800 transition-colors"
+                onClick={connectWorkspace}
+              >
+                Connetti Google Workspace
+              </button>
+              {(status.gmail || status.gcal) && (
+                <button
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-medium text-white bg-red-600 hover:bg-red-700 active:bg-red-800 transition-colors"
+                  onClick={() => {
+                    localStorage.removeItem(`nyra_oauth_${userId}`);
+                    setStatus({ gmail: false, gcal: false });
+                    console.log(`[FRONTEND] Forced disconnect for user: ${userId}`);
+                  }}
+                >
+                  Disconnetti
+                </button>
+              )}
+            </div>
           </div>
 
           <p className="text-xs text-white/60 pt-2">

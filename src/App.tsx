@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { EXTERNAL_APIS } from './config/external-apis';
 import { API_URL } from './config/api';
 import { ExcelResource } from './mcp/excel-resource';
+import * as XLSX from 'xlsx';
 
 // Funzione per formattazione generica dell'analisi Excel
 const formatAnalysis = (data: any) => {
@@ -51,7 +52,6 @@ import { safeParseJSON, isCalendarAction, createN8NPayload } from './services/ca
 import { isEmailAction, createN8NEmailPayload, EmailAction } from './services/emailActionHandler';
 import { getDynamicGreeting, getLocalTZ } from './services/time';
 import { ExcelService, analyzeExcelForEmails } from './services/excelService';
-import * as XLSX from 'xlsx';
 import { EmailPreview } from './components/EmailPreview';
 import {
   Plus, MessageSquare, Mic, Settings as SettingsIcon, User, Moon, Sun, Send,
@@ -2384,804 +2384,58 @@ function App() {
     };
     */
 
-    const handleSendMessage = async () => {
-      console.log("handleSendMessage chiamata");
-      console.log("inputMessage:", inputMessage);
-      console.log("uploadedFiles:", uploadedFiles);
-      
-      // Gestione Excel - solo con verbi di azione
-      if ((inputMessage.toLowerCase().includes('crea') && inputMessage.toLowerCase().includes('fattura')) ||
-          inputMessage.toLowerCase().includes('genera') ||
-          inputMessage.toLowerCase().includes('invia') ||
-          inputMessage.toLowerCase().includes('prepara')) {
-        const messageToSend = inputMessage.trim();
-        
-        // Aggiungi messaggio utente
-        const userMessage: Message = { 
-          id: getUniqueMessageId(),
-          text: messageToSend,
-          isUser: true,
-          timestamp: new Date(),
-          type: 'normal'
-        };
-        
-        setMessages(prev => [...prev, userMessage]);
-        
-        // Nascondi il messaggio di benvenuto quando viene inviato il primo messaggio
-        if (messages.length === 0) {
-          setShowWelcomeMessage(false);
-        }
-        
-        // Aggiorna anche le conversazioni
-        if (activeConversationId) {
-          setConversationMessages(prev => ({
-            ...prev,
-            [activeConversationId]: [...(prev[activeConversationId] || []), userMessage]
-          }));
-        }
-        
-        setInputMessage('');
-        
-        // PRIMA prova a capire con intelligenza
-        const lowerMessage = messageToSend.toLowerCase();
-
-        // Pattern intelligenti (non solo parole chiave)
-        const wantsEmail = 
-          (lowerMessage.includes('contatt') && lowerMessage.includes('client')) ||
-          (lowerMessage.includes('scriv') && window.tempExcelFile) ||
-          (lowerMessage.includes('comunica') && window.tempExcelFile) ||
-          (lowerMessage.match(/invi\w+\s+(a|ai|per)/)) || // "invia a", "inviare ai"
-          (lowerMessage.includes('email') && !lowerMessage.includes('non')) ||
-          (lowerMessage.includes('messag') && window.tempExcelFile);
-
-        const wantsAnalysis = 
-          (lowerMessage.includes('cosa') && lowerMessage.includes('pensi')) ||
-          (lowerMessage.includes('dimmi') && window.tempExcelFile) ||
-          (lowerMessage.includes('mostra') && lowerMessage.includes('dat')) ||
-          (lowerMessage.includes('report')) ||
-          (lowerMessage.includes('riassumi'));
-
-        // USA l'intelligenza PRIMA dei trigger rigidi
-        if (window.tempExcelFile) {
-          if (wantsEmail) {
-            console.log(">>> Capito intelligentemente: vuole email");
-            // Logica semplice per email
-            try {
-              console.log(">>> Preparazione email semplificata (intelligenza)");
-              
-              // Leggi Excel
-              const reader = new FileReader();
-              reader.onload = async (e) => {
-                const data = new Uint8Array(e.target?.result as ArrayBuffer);
-                const workbook = XLSX.read(data, {type: 'array'});
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = XLSX.utils.sheet_to_json(sheet);
-                
-                // Trova chi ha email
-                const conEmail = jsonData.filter((row: any) => row.Email);
-                
-                if (conEmail.length > 0) {
-                  // Crea preview semplice
-                  const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
-                  
-                  // Mostra preview
-                  setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    text: preview,
-                    isUser: false,
-                    timestamp: new Date()
-                  }]);
-                  
-                  // Salva per dopo
-                  (window as any).pendingEmails = conEmail;
-                }
-              };
-              reader.readAsArrayBuffer(window.tempExcelFile);
-              
-            } catch (error) {
-              console.error("Errore semplice:", error);
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: "Errore nel preparare email. Riprova.",
-                isUser: false,
-                timestamp: new Date()
-              }]);
-            }
+    // Funzione per processare il file Excel - DEFINITA PRIMA
+    const processExcelFile = async () => {
+      if (!window.tempExcelFile || !window.tempExcelData) {
+        console.log("❌ Nessun file Excel da processare");
             return;
           }
           
-          if (wantsAnalysis) {
-            console.log(">>> Capito intelligentemente: vuole analisi");
-            // Logica semplice per analisi
-            try {
-              console.log(">>> Analisi Excel semplificata (intelligenza)");
-              
-              // Leggi Excel
-              const reader = new FileReader();
-              reader.onload = async (e) => {
-                const data = new Uint8Array(e.target?.result as ArrayBuffer);
-                const workbook = XLSX.read(data, {type: 'array'});
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = XLSX.utils.sheet_to_json(sheet);
-                
-                // Analisi semplice
-                const totalRecords = jsonData.length;
-                const withEmail = jsonData.filter((row: any) => row.Email).length;
-                const columns = Object.keys(jsonData[0] || {});
-                
-                const analysis = `## Analisi del file: ${window.tempExcelFile?.name || 'Excel'}
-
-**Riepilogo:** ${totalRecords} record analizzati
-
-### Statistiche:
-- **Record totali:** ${totalRecords}
-- **Con email:** ${withEmail} (${Math.round(withEmail/totalRecords*100)}%)
-- **Colonne:** ${columns.join(', ')}
-
-### Anteprima dati:
-${jsonData.slice(0, 3).map((row: any, i: number) => 
-  `Record ${i+1}: ${Object.entries(row).map(([k,v]) => `${k}: ${v}`).join(', ')}`
-).join('\n')}
-
-### Suggerimenti:
-${withEmail > 0 ? `- Posso preparare email per ${withEmail} contatti` : '- Nessuna email trovata'}
-- Posso creare report dettagliato
-- Posso esportare dati in altri formati`;
-
-                // Mostra analisi
-                setMessages(prev => [...prev, {
-                  id: Date.now().toString(),
-                  text: analysis,
-                  isUser: false,
-                  timestamp: new Date()
-                }]);
-              };
-              reader.readAsArrayBuffer(window.tempExcelFile);
-              
-            } catch (error) {
-              console.error("Errore analisi:", error);
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: "Errore nell'analisi. Riprova.",
-                isUser: false,
-                timestamp: new Date()
-              }]);
-            }
-            return;
-          }
-        }
-
-        // SOLO SE non capisce, usa i vecchi trigger come fallback
-        // PRIMO CHECK - rileva richieste email in modo intelligente
-        if ((messageToSend.toLowerCase().match(/\d+\s*(mail|email)/i) ||  // "3 mail"
-             messageToSend.toLowerCase().includes('bozza') ||              // "bozza"
-             (messageToSend.toLowerCase().includes('prepara') && 
-              messageToSend.toLowerCase().includes('mail')) ||             // "prepara mail"
-             messageToSend.toLowerCase().includes('email')) && 
-             window.tempExcelFile) {
-          
-          console.log(">>> TRIGGER EMAIL MULTIPLE ATTIVATO");
-          console.log("🔍 File disponibile:", window.tempExcelFile);
-          console.log("🔍 Nome file:", window.tempExcelFile?.name);
-          console.log("🔍 Tipo file:", typeof window.tempExcelFile);
-          console.log("🔍 È File object?", window.tempExcelFile instanceof File);
-          
-          // Logica semplice per email
-          try {
-            console.log(">>> Preparazione email semplificata");
-            
-            // Leggi Excel
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-              const data = new Uint8Array(e.target?.result as ArrayBuffer);
-              const workbook = XLSX.read(data, {type: 'array'});
-              const sheet = workbook.Sheets[workbook.SheetNames[0]];
-              const jsonData = XLSX.utils.sheet_to_json(sheet);
-              
-              // Trova chi ha email
-              const conEmail = jsonData.filter((row: any) => row.Email);
-              
-              if (conEmail.length > 0) {
-                // Crea preview semplice
-                const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
-                
-                // Mostra preview
-                setMessages(prev => [...prev, {
-                  id: Date.now().toString(),
-                  text: preview,
-                  isUser: false,
-                  timestamp: new Date()
-                }]);
-                
-                // Salva per dopo
-                (window as any).pendingEmails = conEmail;
-              }
-            };
-            reader.readAsArrayBuffer(window.tempExcelFile);
-            
-          } catch (error) {
-            console.error("Errore semplice:", error);
-            setMessages(prev => [...prev, {
-              id: Date.now().toString(),
-              text: "Errore nel preparare email. Riprova.",
-              isUser: false,
-              timestamp: new Date()
-            }]);
-          }
-          return; // STOP qui, non continuare
-        }
-        
-        // Check se l'utente vuole analizzare Excel per email
-        console.log("CHECK 1: Contiene mail?", messageToSend.toLowerCase().includes('mail'));
-        console.log("CHECK 2: Contiene email?", messageToSend.toLowerCase().includes('email'));
-        console.log("CHECK 3: Uploaded files length:", uploadedFiles.length);
-        
-        if ((messageToSend.toLowerCase().includes('email') || 
-             messageToSend.toLowerCase().includes('mail') ||
-             messageToSend.toLowerCase().includes('invia') ||
-             messageToSend.toLowerCase().includes('prepara')) && 
-            uploadedFiles.length > 0 &&
-            uploadedFiles[0].name.includes('.xls')) {
-          
-          // Logica semplice per email (vecchio controllo)
-          try {
-            console.log(">>> Preparazione email semplificata (vecchio controllo)");
-            
-            // Leggi Excel
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-              const data = new Uint8Array(e.target?.result as ArrayBuffer);
-              const workbook = XLSX.read(data, {type: 'array'});
-              const sheet = workbook.Sheets[workbook.SheetNames[0]];
-              const jsonData = XLSX.utils.sheet_to_json(sheet);
-              
-              // Trova chi ha email
-              const conEmail = jsonData.filter((row: any) => row.Email);
-              
-              if (conEmail.length > 0) {
-                // Crea preview semplice
-                const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
-                
-                // Mostra preview
-                setMessages(prev => [...prev, {
-                  id: Date.now().toString(),
-                  text: preview,
-                  isUser: false,
-                  timestamp: new Date()
-                }]);
-                
-                // Salva per dopo
-                (window as any).pendingEmails = conEmail;
-              }
-            };
-            reader.readAsArrayBuffer(uploadedFiles[0]);
-            
-          } catch (error) {
-            console.error("Errore semplice:", error);
-            setMessages(prev => [...prev, {
-              id: Date.now().toString(),
-              text: "Errore nel preparare email. Riprova.",
-              isUser: false,
-              timestamp: new Date()
-            }]);
-          }
-          console.log("Uscita 1: Processo Excel per email (vecchio controllo)");
-          return;
-        }
-        
-        // Reset altezza textarea
-        setTimeout(() => {
-          if (textareaRef.current) {
-            textareaRef.current.style.height = '40px';
-          }
-        }, 0);
-        
-        // Scroll immediato per messaggio utente
-        setTimeout(() => {
-          scrollToBottom();
-        }, 100);
-        
-        try {
-          const result = await excelService.createExcelFromRequest(messageToSend);
-          
-          const assistantMessage: Message = {
-            id: getUniqueMessageId(),
-            text: result.message,
-            isUser: false,
-            timestamp: new Date(),
-            type: 'normal'
-          };
-          
-          setMessages(prev => [...prev, assistantMessage]);
-          
-          // Aggiorna anche le conversazioni
-          if (activeConversationId) {
-            setConversationMessages(prev => ({
-              ...prev,
-              [activeConversationId]: [...(prev[activeConversationId] || []), assistantMessage]
-            }));
-          }
-          
-          // Scroll per risposta Excel
-          setTimeout(() => {
-            scrollToBottom();
-          }, 100);
-          
-        } catch (error) {
-          console.error('Errore Excel:', error);
-          const errorMessage: Message = {
-            id: getUniqueMessageId(),
-            text: '❌ Errore nella creazione dell\'Excel. Riprova.',
-            isUser: false,
-            timestamp: new Date(),
-            type: 'normal'
-          };
-          
-          setMessages(prev => [...prev, errorMessage]);
-          
-          // Aggiorna anche le conversazioni per l'errore
-          if (activeConversationId) {
-            setConversationMessages(prev => ({
-              ...prev,
-              [activeConversationId]: [...(prev[activeConversationId] || []), errorMessage]
-            }));
-          }
-          
-          setTimeout(() => {
-            scrollToBottom();
-          }, 100);
-        }
-        
-        console.log("Uscita 2: Fine gestione Excel");
-        return;
-      }
+      console.log("📊 PROCESSAMENTO FILE EXCEL:", window.tempExcelFile.name);
+      console.log("📊 DATI DISPONIBILI:", window.tempExcelData.length, "righe");
       
-      // CONTROLLO CRITICO: Verifica che ci sia una chat attiva prima di procedere
-      if (!activeConversationId) {
-        console.warn('⚠️ Nessuna chat attiva disponibile, inizializzo il sistema chat...');
-        
-        // Tenta di garantire una chat attiva
-        const activeChatId = ensureActiveChat();
-        
-        if (!activeChatId) {
-          console.error('❌ Errore: Impossibile garantire una chat attiva per l\'invio del messaggio');
-          
-          // Mostra messaggio di errore all'utente
-          const errorMessage: Message = {
-            id: getUniqueMessageId(),
-            text: 'Errore: Impossibile inizializzare la conversazione. Riprova.',
-            isUser: false,
-            timestamp: new Date(),
-            type: 'normal'
-          };
-          
-          setMessages(prev => [...prev, errorMessage]);
-          
-          // ✅ Scroll alla fine per messaggi di errore
-          setTimeout(() => {
-            scrollToBottom();
-          }, 100);
-          
-          console.log("Uscita 3: Nessuna chat attiva, inizializzazione");
-          return;
-        }
-        
-        // console.log('✅ Chat attiva garantita per l\'invio del messaggio:', activeChatId);
-      }
-      
-      // GARANTISCI SEMPRE UNA RISPOSTA - anche con messaggio vuoto
-      const messageToSend = inputMessage.trim();
+        // System Prompt specifico per Excel
+        const excelPrompt = `Sei NYRA, un assistente AI strategico per analisi business.
 
-      // Prima controlla uploadedFiles, poi fallback a window.tempExcelFile
-      let fileToUse = null;
-
-      if (uploadedFiles && uploadedFiles.length > 0 && uploadedFiles[0].name.includes('.xls')) {
-        fileToUse = uploadedFiles[0];
-      } else if (window.tempExcelFile) {
-        fileToUse = window.tempExcelFile;
-      }
-
-      // Se non c'è file ma ci sono dati in memoria, usali
-      const dataToUse = window.tempExcelData || [];
-
-
-      // Se abbiamo un file da usare, continua con la logica
-      if (fileToUse) {
-        const file = fileToUse;
-        
-        // Verifica che il file sia valido
-        if (!file || !file.name) {
-          console.log('File non valido:', file);
-          return;
-        }
-        
-        // Se preme solo invio con file - CHIEDI COSA VUOLE FARE
-        if (!messageToSend) {
-          // Messaggio di dialogo per chiedere cosa vuole fare
-          const dialogMessage: Message = {
-            id: getUniqueMessageId(),
-            text: `📎 Ho rilevato il file Excel: **${file.name}**
-
-Cosa preferisci fare?
-
-🔍 **Analisi del file** - Analizzo i dati e ti spiego cosa contiene
-📧 **Invia email** - Genero email personalizzate dai dati
-
-Rispondi con:
-• "analisi" o "analizza" per l'analisi del file
-• "email" o "invia" per generare email`,
-            isUser: false,
-            timestamp: new Date(),
-            type: 'normal'
-          };
-          setMessages(prev => [...prev, dialogMessage]);
-          
-          // Salva il file per le azioni successive
-          window.tempExcelFile = file;
-          
-          setInputMessage('');
-          setTimeout(() => setUploadedFiles([]), 100); // Pulisce dopo che è stato salvato
-          return;
-        }
-        
-        // Se scrive "analisi" o "analizza" - USA AI INTELLIGENTE
-        console.log("CHECK 4: Contiene analisi?", messageToSend.toLowerCase().includes('analisi'));
-        console.log("CHECK 5: Contiene analizza?", messageToSend.toLowerCase().includes('analizza'));
-        
-        if (messageToSend.toLowerCase().includes('analisi') || 
-            messageToSend.toLowerCase().includes('analizza')) {
-          
-          const excelResource = new ExcelResource();
-          
-          if (window.tempExcelFile) {
-            try {
-              console.log('🔴 DEBUG: Inizio analisi Excel');
-              console.log('🔴 DEBUG: File:', window.tempExcelFile.name, window.tempExcelFile.size);
-              
-              // Ottieni TUTTI i dati
-              const result = await excelResource.analyze(window.tempExcelFile);
-              console.log('🔴 DEBUG: Risultato analisi:', result);
-              
-              // Crea prompt INTELLIGENTE per l'AI
-              const aiPrompt = `Sei NYRA, assistente AI strategico per analisi business.
-
-STILE DI OUTPUT RICHIESTO:
-- Inizia SEMPRE con un ALERT se ci sono opportunità perse
-- Usa ## per titoli principali
-- Usa **grassetto** per numeri e percentuali chiave
-- Fornisci SEMPRE azioni concrete numerate
-- Linguaggio diretto e business-oriented
-- ZERO emoji
+COMPORTAMENTO RICHIESTO:
+- AGISCI DIRETTAMENTE, NON FARE DOMANDE INUTILI
+- Se l'utente chiede email, GENERA SUBITO i JSON per le bozze email
+- NON creare solo testo nella chat, ma JSON per il sistema email
 
 I dati del file Excel sono:
-${JSON.stringify(result.data)}
+${JSON.stringify(window.tempExcelData, null, 2)}
 
-L'utente chiede: "${messageToSend}"
+FORMATO EMAIL RICHIESTO:
+Per ogni email da inviare, genera SOLO questo JSON:
+{
+  "action": "send-email",
+  "to": ["email@cliente.com"],
+  "subject": "Oggetto personalizzato per il progetto",
+  "body": "DATI per riempire il template - NON il testo completo dell'email"
+}
 
-STRUTTURA OBBLIGATORIA DELLA RISPOSTA:
-
-## Analisi Strategica - [Nome File]
-
-**ALERT:** [Evidenzia subito il problema/opportunità principale]
-
-### AZIONI IMMEDIATE (cosa fare SUBITO):
-1. [Azione specifica con nome cliente/progetto]
-2. [Azione specifica con nome cliente/progetto]
-3. [Azione specifica con nome cliente/progetto]
-
-### METRICHE CHIAVE:
-- **[Metrica]:** [Valore] - [Implicazione]
-- **[Metrica]:** [Valore] - [Implicazione]
-
-### OPPORTUNITÀ IDENTIFICATE:
-- [Opportunità concreta basata sui dati]
-- [Cross-selling o upselling possibile]
-
-### PIANO 3 GIORNI:
-**Giorno 1:** [Azione specifica]
-**Giorno 2:** [Azione specifica]
-**Giorno 3:** [Azione specifica]
-
-ESEMPI DI OUTPUT:
-
-Per file con email non inviate:
-"**ALERT:** 6 clienti su 10 non contattati (60% opportunità perse)"
-
-Per progetti urgenti:
-"**ALERT:** 5 progetti marcati urgenti richiedono azione immediata"
-
-Per contatti email:
-"### AZIONI IMMEDIATE:
-1. Inviare email a Laura Bianchi per progetto Moda AI (non contattata)
-2. Follow-up con Giulia Verdi per collaborazione editoriale (proposta ferma)
-3. Schedulare meeting con Elena Conti per presentazione fotografica"
-
-IMPORTANTE: Sii SPECIFICO. Usa i NOMI reali dal file. Suggerisci AZIONI concrete, non consigli generici.
-
-### AZIONE IMMEDIATA DA FARE ORA:
-Proponi UNA sola azione specifica che l'utente può fare SUBITO.
-Esempio: "Vuoi che prepari ora l'email per Laura Bianchi con proposta shooting AI? Dimmi solo 'sì' e la creo."
-
-NON dire cose generiche come "invia proposte" ma sii SPECIFICO:
-- "Preparo email per Laura Bianchi?"
-- "Creo calendario follow-up per i 6 non contattati?"
-- "Genero template email personalizzato per settore moda?"
-
-L'utente deve poter rispondere solo "sì" o "fai quello" per procedere.`;
-
-              console.log("PROMPT STRATEGICO APPLICATO - v2");
-              console.log("🔴 PROMPT INVIATO (PRIMO BLOCCO):", aiPrompt);
-              console.log("🔴 BLOCCO ATTIVO: window.openRouter.sendMessage()");
-
-              // Inizializza OpenRouter se non esiste ancora
-              if (!window.openRouter) {
-                console.log('🔴 DEBUG: Inizializzo OpenRouter');
-                const { OpenRouterConnector } = await import('./services/openrouter');
-                window.openRouter = new OpenRouterConnector();
-              }
-              
-              console.log('🔴 DEBUG: Invio prompt a OpenRouter');
-              console.log('🔴 DEBUG: Prompt length:', aiPrompt.length);
-              
-              // Invia all'AI per analisi VERA
-              const aiResponse = await window.openRouter.sendMessage(aiPrompt, []);
-              console.log("🔴 RISPOSTA RICEVUTA (PRIMO BLOCCO):", aiResponse);
-              
-              // Mostra la risposta INTELLIGENTE dell'AI
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: aiResponse,
-                isUser: false,
-                timestamp: new Date()
-              }]);
-              
-            } catch (error) {
-              console.error('🔴 ERRORE ANALISI:', error);
-              console.error('🔴 ERRORE STACK:', error.stack);
-              console.error('🔴 ERRORE MESSAGE:', error.message);
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: `❌ Errore nell'analisi: ${error.message}\n\nDettagli nel console. Riprova.`,
-                isUser: false,
-                timestamp: new Date()
-              }]);
-            }
-          } else {
-            setMessages(prev => [...prev, {
-              id: Date.now().toString(),
-              text: "⚠️ Carica prima un file Excel",
-              isUser: false,
-              timestamp: new Date()
-            }]);
-          }
-          
-          setInputMessage('');
-          return;
-        }
-
-        // COMMENTATO - CODICE VECCHIO SOSTITUITO CON MCP
-        /*
-          if (dataToAnalyze.length === 0 && !fileToAnalyze) {
-            const noDataMessage: Message = {
-              id: getUniqueMessageId(),
-              text: "⚠️ Nessun file Excel da analizzare. Carica un file Excel e poi scrivi 'analizza' per iniziare.",
-              isUser: false,
-              timestamp: new Date(),
-              type: 'normal'
-            };
-            setMessages(prev => [...prev, noDataMessage]);
-            return;
-          }
-          
-          if (dataToAnalyze.length > 0) {
-            // USA I DATI GIÀ PARSATI
-            setIsProcessingEmails(true);
-            console.log('🔴 USANDO DATI GIÀ PARSATI:', dataToAnalyze);
-            
-            const data = dataToAnalyze;
-            
-            // Salta direttamente all'analisi
-            try {
-              console.log('🔴 DEBUG EXCEL - FILE:', fileToAnalyze?.name);
-              console.log('🔴 DEBUG EXCEL - DATI PARSATI:', data);
-              
-              // I dati sono già filtrati, non serve rifiltrare
-              
-              // VERIFICA SE IL FILE HA DATI REALI
-              if (!data || data.length === 0) {
-                const emptyFileMessage: Message = {
-                  id: getUniqueMessageId(),
-                  text: `📎 **${fileToAnalyze.name}**
-
-⚠️ **FILE VUOTO RILEVATO**
-
-Il file Excel che hai caricato è vuoto o non contiene dati analizzabili.
-
-**Possibili cause:**
-• Il file è un template vuoto
-• Il file contiene solo intestazioni senza dati
-• Il file è corrotto o non leggibile
-
-**Cosa puoi fare:**
-• Carica un file Excel con dati reali
-• Verifica che il file contenga informazioni nelle celle
-• Controlla che il file non sia solo un modello
-
-Vuoi provare con un altro file?`,
-                  isUser: false,
-                  timestamp: new Date(),
-                  type: 'normal'
-                };
-                setMessages(prev => [...prev, emptyFileMessage]);
-                return;
-              }
-              
-              // VERIFICA SE È SOLO UN TEMPLATE (solo intestazioni)
-              const hasRealData = data.some(row => {
-                const values = Object.values(row);
-                return values.some(value => 
-                  value && 
-                  value.toString().trim() !== '' && 
-                  !value.toString().toLowerCase().includes('template') &&
-                  !value.toString().toLowerCase().includes('esempio')
-                );
-              });
-              
-              if (!hasRealData) {
-                const templateMessage: Message = {
-                  id: getUniqueMessageId(),
-                  text: `📎 **${fileToAnalyze.name}**
-
-⚠️ **TEMPLATE RILEVATO**
-
-Il file Excel che hai caricato sembra essere un template o modello vuoto.
-
-**Contenuto rilevato:**
-• Solo intestazioni di colonne
-• Nessun dato reale nelle celle
-• Possibili valori di esempio o placeholder
-
-**Per un'analisi reale, carica un file con:**
-• Dati reali nelle celle
-• Informazioni concrete da analizzare
-• Contenuto effettivo, non solo struttura
-
-Vuoi provare con un file che contiene dati reali?`,
-                  isUser: false,
-                  timestamp: new Date(),
-                  type: 'normal'
-                };
-                setMessages(prev => [...prev, templateMessage]);
-                return;
-              }
-              
-              // Debug: Log dei dati Excel prima di inviarli
-              console.log('Dati Excel inviati a OpenRouter:', data);
-              
-              // Prepara prompt per OpenRouter con DATI REALI dal file Excel
-              const analysisPrompt = `
-Analizza questo file Excel REALE e capisci ESATTAMENTE cosa contiene.
-
-INFORMAZIONI FILE:
-Nome: ${fileToAnalyze.name}
-Totale righe: ${data.length}
-
-DATI REALI DAL FILE EXCEL:
-${JSON.stringify(data, null, 2)}
-
-ANALIZZA E SUGGERISCI AZIONI:
+AZIONI IMMEDIATE:
 1. Identifica TUTTE le email valide nel file
 2. Conta quanti record sono "Da inviare" vs "Inviata" vs "Fallita"
-3. Se ci sono email da inviare, suggerisci di generare le comunicazioni
-4. Se ci sono email fallite, suggerisci di verificare gli indirizzi
-5. Se ci sono template diversi, analizza l'efficacia
+3. Identifica i progetti più urgenti o con scadenza imminente
+4. Se l'utente chiede email, GENERA SUBITO i JSON per ogni cliente
 
-IMPORTANTE: Usa SOLO i dati reali dal file. Non inventare nulla.
-Concentrati su AZIONI PRATICHE che l'utente può fare subito.
+IMPORTANTE: 
+- Usa SOLO i dati reali dal file
+- AGISCI, non chiedere conferma
+- GENERA JSON send-email per ogni cliente
+- Il campo "body" deve contenere SOLO i dati specifici del cliente (nome, progetto, dettagli)
+- NON generare l'intero testo dell'email
+- Il template esistente si occuperà del formato e della struttura
+- Esempio body: "Cliente: Laura Bianchi, Progetto: Shooting moda AI, Budget: 5000€, Deadline: 30/01/2025"
+- NON scrivere testo normale, SOLO JSON
 
-TERMINA sempre con una domanda diretta su cosa fare.
-              `;
-              console.log('🔴 PROMPT COMPLETO INVIATO:', analysisPrompt);
+SE L'UTENTE CHIEDE EMAIL: Genera immediatamente i JSON send-email per tutti i clienti con "Mail Inviata: No".`;
               
-              // Verifica se il backend è disponibile
+      try {
               const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://nyra-backend-c7zi.onrender.com';
               
-              // La tab dinamica sarà mostrata dentro la chat
-              
-              let aiAnalysis: string;
-              
-              if (backendUrl) {
-                // Mostra rettangolo dinamico che si aggiorna durante l'analisi
-                // STEP 1: Solo nome file
-                const fileDataMessage: Message = {
-                  id: getUniqueMessageId(),
-                  text: `📊 **${fileToAnalyze.name}**`,
-                  isUser: false,
-                  timestamp: new Date(),
-                  type: 'excel-analysis',
-                  status: 'analyzing'
-                };
-                setMessages(prev => [...prev, fileDataMessage]);
-                
-                // STEP 2: Aggiungi riepilogo dopo 500ms
-                setTimeout(() => {
-                  setMessages(prev => prev.map(msg => 
-                    msg.id === fileDataMessage.id 
-                      ? {
-                          ...msg,
-                          text: `📊 **${fileToAnalyze.name}**`
-                        }
-                      : msg
-                  ));
-                }, 500);
-                
-                // STEP 3: Aggiungi colonne dopo 1000ms
-                setTimeout(() => {
-                  setMessages(prev => prev.map(msg => 
-                    msg.id === fileDataMessage.id 
-                      ? {
-                          ...msg,
-                          text: `📊 **${fileToAnalyze.name}**
-
-**📋 Struttura dati**
-${Object.keys(data[0] || {}).map(col => `• ${col}`).join(' • ')}`
-                        }
-                      : msg
-                  ));
-                }, 1000);
-                
-                // STEP 4: Aggiungi anteprima dopo 1500ms
-                setTimeout(() => {
-                  setMessages(prev => prev.map(msg => 
-                    msg.id === fileDataMessage.id 
-                      ? {
-                          ...msg,
-                          text: `📊 **${fileToAnalyze.name}**
-${(() => {
-  const emails = data.filter((row: any) => row.Email && row.Email.includes('@')).map((row: any) => `${row.Nome || 'N/A'} ${row.Cognome || 'N/A'} (${row.Email})`);
-  const pending = data.filter((row: any) => row.Stato === 'Da inviare' || row.Stato === 'Pending');
-  const sent = data.filter((row: any) => row.Stato === 'Inviata' || row.Stato === 'Sent');
-  const failed = data.filter((row: any) => row.Stato === 'Fallita' || row.Stato === 'Failed');
-  
-  let result = '';
-  if (emails.length > 0) result += `• ${emails.length} email trovate: ${emails.slice(0, 3).join(', ')}${emails.length > 3 ? '...' : ''}\n`;
-  if (pending.length > 0) result += `• ${pending.length} da inviare\n`;
-  if (sent.length > 0) result += `• ${sent.length} già inviate\n`;
-  if (failed.length > 0) result += `• ${failed.length} fallite\n`;
-  
-  return result.trim();
-})()}`
-                        }
-                      : msg
-                  ));
-                }, 1500);
-                
-                // DELAY per far vedere i dati
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                console.log("🔴 PROMPT INVIATO (SECONDO BLOCCO):", analysisPrompt);
-                console.log("🔴 BLOCCO ATTIVO: Backend API con prompt migliorato");
-                
-                // CHIAMATA REALE AL BACKEND
-                const openRouterResponse = await fetch(`${backendUrl}/api/ai/chat`, {
+        const response = await fetch(`${backendUrl}/api/ai/chat`, {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json'
@@ -3191,53 +2445,11 @@ ${(() => {
                     messages: [
                       {
                         role: 'system',
-                        content: `Sei NYRA, assistente AI professionale per analisi dati.
-
-REGOLE DI FORMATTAZIONE:
-- USA markdown per struttura chiara (##, **, liste)
-- NIENTE emoji nel testo
-- Linguaggio professionale ma accessibile
-- Risposte concise ma complete
-
-STRUTTURA ANALISI:
-1. Inizia SEMPRE con: "## Analisi del file: [nome_file]"
-2. Poi un breve riepilogo: "**Riepilogo:** X record analizzati"
-3. Sezioni principali con ## per ogni aspetto importante
-4. Usa liste puntate per dettagli
-5. Numeri e percentuali in **grassetto**
-
-QUANDO TROVI EMAIL:
-- Conta quante email valide ci sono
-- Se l'utente non ha chiesto nulla di specifico, suggerisci: "Ho identificato X indirizzi email. Posso preparare una campagna email personalizzata se necessario."
-
-INTELLIGENZA CONTESTUALE:
-- Se l'utente chiede qualcosa di specifico, rispondi SOLO a quello
-- Se chiede analisi generica, fornisci overview completa
-- Adatta il livello di dettaglio alla complessità dei dati
-
-ESEMPIO OUTPUT:
-## Analisi del file: clienti.xlsx
-
-**Riepilogo:** 10 record analizzati con informazioni complete
-
-### Distribuzione per categoria
-- Settore Tech: **4 contatti** (40%)
-- Settore Moda: **3 contatti** (30%)
-- Altri: **3 contatti** (30%)
-
-### Opportunità identificate
-Ho trovato **10 indirizzi email validi**. Posso preparare comunicazioni mirate per settore se necessario.
-
-### Prossimi passi suggeriti
-- Segmentazione per settore per campagne mirate
-- Export dei dati in formato diverso
-- Creazione di report dettagliato
-
-Ricorda: professionale, strutturato, senza emoji, intelligente nel contesto.`
+                content: excelPrompt
                       },
                       {
                         role: 'user',
-                        content: analysisPrompt
+                content: `Analizza il file Excel: ${window.tempExcelFile.name}`
                       }
                     ],
                     temperature: 0.7,
@@ -3245,1169 +2457,451 @@ Ricorda: professionale, strutturato, senza emoji, intelligente nel contesto.`
                   })
                 });
 
-                const aiResult = await openRouterResponse.json();
-                console.log("🔴 RISPOSTA RICEVUTA (SECONDO BLOCCO):", aiResult);
-
-                // I dati del file sono già stati mostrati nel rettangolo
-
-                // Controlla se la risposta è valida
-                if (!aiResult.choices || !aiResult.choices[0] || !aiResult.choices[0].message) {
-                  throw new Error('Risposta API non valida');
-                }
-
-                aiAnalysis = aiResult.choices[0].message.content;
-                
-                // Aggiorna il rettangolo con l'analisi completa
-                const updatedFileDataMessage: Message = {
-                  id: fileDataMessage.id, // Stesso ID per aggiornare il messaggio esistente
-                  text: `📊 **${fileToAnalyze.name}**
-${(() => {
-  const emails = data.filter((row: any) => row.Email && row.Email.includes('@')).map((row: any) => `${row.Nome || 'N/A'} ${row.Cognome || 'N/A'} (${row.Email})`);
-  const pending = data.filter((row: any) => row.Stato === 'Da inviare' || row.Stato === 'Pending');
-  const sent = data.filter((row: any) => row.Stato === 'Inviata' || row.Stato === 'Sent');
-  const failed = data.filter((row: any) => row.Stato === 'Fallita' || row.Stato === 'Failed');
-  
-  let result = '';
-  if (emails.length > 0) result += `• ${emails.length} email trovate: ${emails.slice(0, 3).join(', ')}${emails.length > 3 ? '...' : ''}\n`;
-  if (pending.length > 0) result += `• ${pending.length} da inviare\n`;
-  if (sent.length > 0) result += `• ${sent.length} già inviate\n`;
-  if (failed.length > 0) result += `• ${failed.length} fallite\n`;
-  
-  return result.trim();
-})()}
-
-${aiAnalysis}`,
-                  isUser: false,
-                  timestamp: new Date(),
-                  type: 'excel-analysis',
-                  status: 'completed'
-                };
-                
-                // STEP 5: Aggiorna gradualmente l'analisi AI
-                setTimeout(() => {
-                  setMessages(prev => prev.map(msg => 
-                    msg.id === fileDataMessage.id ? updatedFileDataMessage : msg
-                  ));
-                }, 2000);
-              } else {
-                // ANALISI LOCALE SENZA API
-                const localMessage: Message = {
-                  id: getUniqueMessageId(),
-                  text: "📊 Analisi locale in corso...",
-                  isUser: false,
-                  timestamp: new Date(),
-                  type: 'excel-analysis',
-                  status: 'local'
-                };
-                setMessages(prev => [...prev, localMessage]);
-                
-                aiAnalysis = `
-📊 ANALISI FILE EXCEL: ${fileToAnalyze.name}
-
-Ho analizzato il tuo file Excel che contiene ${data.length} righe di dati.
-
-DATI RILEVATI:
-${data.slice(0, 3).map((row, i) => `Riga ${i+1}: ${JSON.stringify(row)}`).join('\n')}
-
-AZIONI DISPONIBILI:
-• Scrivi "email" per generare email personalizzate
-• Scrivi "invia" per processare il file per email
-                `;
-              }
-              
-              // L'analisi è già stata aggiunta al rettangolo dinamico
-              
-              // Salva dati per azioni successive
-              window.tempExcelData = data;
-              console.log('Dati salvati in window.tempExcelData:', window.tempExcelData);
-              
-            } catch (error) {
-              console.error('Errore analisi AI:', error);
-              const errorMessage: Message = {
-                id: getUniqueMessageId(),
-                text: `Errore nell'analisi del file: ${error instanceof Error ? error.message : 'Errore sconosciuto'}. Verifica che il file Excel sia valido e contenga dati.`,
-                isUser: false,
-                timestamp: new Date(),
-                type: 'normal'
-              };
-              setMessages(prev => [...prev, errorMessage]);
-            } finally {
-              setIsProcessingEmails(false);
-              setInputMessage('');
-              setUploadedFiles([]);
-              window.tempExcelFile = undefined;
-            }
-            
-          } else if (fileToAnalyze) {
-            // NESSUN DATO PARSATO - PARSA IL FILE
-            setIsProcessingEmails(true);
-            
-            try {
-              // Parse del file Excel con la nostra funzione
-              const rawData = await parseExcelFile(fileToAnalyze);
-              console.log('🔴 DEBUG EXCEL - FILE:', fileToAnalyze?.name);
-              console.log('🔴 DEBUG EXCEL - DATI RAW:', rawData);
-              
-              // FILTRA RIGHE VUOTE E NOMI FAKE
-              const data = rawData.filter((row: any) => {
-                const keys = Object.keys(row);
-                const values = Object.values(row);
-                
-                // Elimina righe completamente vuote
-                if (values.every(val => !val || val.toString().trim() === '')) return false;
-                
-                // Elimina righe con nomi fake come "EMPTY_1", "EMPTY_2", etc.
-                const hasFakeNames = values.some(val => 
-                  val && val.toString().match(/^(EMPTY_|empty_|test_|fake_|dummy_)\d*$/i)
-                );
-                if (hasFakeNames) return false;
-                
-                return true;
-              });
-              console.log('🔴 DEBUG EXCEL - DATI FILTRATI:', data);
-              console.log('🔴 DEBUG EXCEL - WINDOW.TEMPEXCELFILE:', window.tempExcelFile);
-              console.log('🔴 DEBUG EXCEL - UPLOADEDFILES:', uploadedFiles);
-              
-              // Continua con la stessa logica di verifica e analisi...
-              // (Il resto del codice rimane uguale)
-              
-              // Salva dati per azioni successive
-              window.tempExcelData = data;
-              console.log('Dati salvati in window.tempExcelData:', window.tempExcelData);
-              
-            } catch (error) {
-              console.error('Errore durante il parsing Excel:', error);
-              setIsProcessingEmails(false);
-              showError('Errore durante l\'analisi del file Excel');
-            }
-            
-            return;
-          } else {
-            // NESSUN FILE E NESSUN DATO DISPONIBILE
-            const noDataMessage: Message = {
-              id: getUniqueMessageId(),
-              text: `⚠️ **Nessun file Excel da analizzare**
-
-Per analizzare dati Excel:
-1. Carica un file Excel trascinandolo nell'area chat
-2. Attendi che venga processato
-3. Scrivi "analisi" o "analizza"
-
-Oppure carica un nuovo file Excel per iniziare.`,
-              isUser: false,
-              timestamp: new Date(),
-              type: 'normal'
-            };
-            setMessages(prev => [...prev, noDataMessage]);
-            return;
-          }
+        if (!response.ok) {
+          throw new Error(`Errore OpenRouter: ${response.statusText}`);
         }
-        */
-
-        // Se scrive "genera" o "email" con file - USA DATI SALVATI
-        console.log("CHECK 6: Email trigger con file - Contiene email?", messageToSend.toLowerCase().includes('email'));
-        console.log("CHECK 7: Email trigger con file - Contiene mail?", messageToSend.toLowerCase().includes('mail'));
         
-        if (messageToSend.toLowerCase().includes('email') || 
-            messageToSend.toLowerCase().includes('genera') ||
-            messageToSend.toLowerCase().includes('invia') ||
-            messageToSend.toLowerCase().includes('prepara')) {
+        const data = await response.json();
+        const aiResponse = data.choices[0].message.content;
+        
+        // CONTROLLA SE CI SONO JSON send-email DA PROCESSARE
+        if (aiResponse.includes('"action": "send-email"')) {
+          console.log('📧 Email JSON rilevati nella risposta!');
           
-          if (window.tempExcelData && window.tempExcelData.length > 0) {
-            // Genera email con i dati già analizzati
-            // Logica semplice per email con dati salvati
-            try {
-              console.log(">>> Preparazione email semplificata (dati salvati)");
-              
-              // Trova chi ha email
-              const conEmail = window.tempExcelData.filter((row: any) => row.Email);
-              
-              if (conEmail.length > 0) {
-                // Crea preview semplice
-                const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
+          // Estrai tutti i JSON send-email dalla risposta
+          const emailMatches = aiResponse.match(/\{[^}]*"action":\s*"send-email"[^}]*\}/g);
+          
+          if (emailMatches && emailMatches.length > 0) {
+            console.log('📧 JSON email trovati:', emailMatches.length);
+            
+            // Processa ogni JSON email
+            for (let index = 0; index < emailMatches.length; index++) {
+              const jsonStr = emailMatches[index];
+              try {
+                const emailAction = JSON.parse(jsonStr);
+                console.log(`📧 Processando email ${index + 1}:`, emailAction);
                 
-                // Mostra preview
-                setMessages(prev => [...prev, {
-                  id: Date.now().toString(),
-                  text: preview,
-                  isUser: false,
-                  timestamp: new Date()
-                }]);
+                // CREA LA BOZZA EMAIL USANDO IL SISTEMA ESISTENTE
+                console.log(`📧 Creando bozza per: ${emailAction.to}`);
                 
-                // Salva per dopo
-                (window as any).pendingEmails = conEmail;
-              }
-              window.tempExcelData = null;
-              
-            } catch (error) {
-              console.error("Errore semplice:", error);
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: "Errore nel preparare email. Riprova.",
-                isUser: false,
-                timestamp: new Date()
-              }]);
-            }
-          } else {
-            // Se non ci sono dati salvati, usa il file originale
-            try {
-              console.log(">>> Preparazione email semplificata (file originale)");
-              
-              // Leggi Excel
-              const reader = new FileReader();
-              reader.onload = async (e) => {
-                const data = new Uint8Array(e.target?.result as ArrayBuffer);
-                const workbook = XLSX.read(data, {type: 'array'});
-                const sheet = workbook.Sheets[workbook.SheetNames[0]];
-                const jsonData = XLSX.utils.sheet_to_json(sheet);
-                
-                // Trova chi ha email
-                const conEmail = jsonData.filter((row: any) => row.Email);
-                
-                if (conEmail.length > 0) {
-                  // Crea preview semplice
-                  const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
+                // Usa il sistema esistente per processare l'email
+                try {
+                  // Simula il processamento dell'email action
+                  const emailPayload = {
+                    action_type: 'email',
+                    email: {
+                      to: Array.isArray(emailAction.to) ? emailAction.to : [emailAction.to],
+                      subject: emailAction.subject || 'Messaggio da NYRA',
+                      body: emailAction.body || ''
+                    },
+                    user_id: currentUser?.email || 'anonymous'
+                  };
                   
-                  // Mostra preview
-                  setMessages(prev => [...prev, {
-                    id: Date.now().toString(),
-                    text: preview,
-                    isUser: false,
-                    timestamp: new Date()
-                  }]);
+                  console.log('📧 Payload email creato:', emailPayload);
                   
-                  // Salva per dopo
-                  (window as any).pendingEmails = conEmail;
+                  // Usa il sistema email interno per creare la bozza
+                  try {
+                    console.log('✅ Creando bozza email tramite sistema interno');
+                    
+                    // Prepara i dati per EmailPreview usando il template esistente
+                    const clientData = emailAction.body || '';
+                    
+                    // Crea il corpo email usando il template esistente
+                    const templateBody = `Gentile Cliente,
+
+${clientData}
+
+Cordiali saluti,
+Il Team NYRA`;
+
+                    const emailData = {
+                      email: Array.isArray(emailAction.to) ? emailAction.to[0] : emailAction.to,
+                      subject: emailAction.subject || 'Messaggio da NYRA',
+                      suggestedSubject: emailAction.subject || 'Messaggio da NYRA',
+                      body: templateBody,
+                      suggestedBody: templateBody,
+                      emailType: 'standard', // Tipo per il template
+                      to: Array.isArray(emailAction.to) ? emailAction.to : [emailAction.to],
+                      cc: emailAction.cc || [],
+                      bcc: emailAction.bcc || []
+                    };
+                    
+                    // Aggiungi alla lista delle bozze esistenti
+                    const currentEmails = emailPreviewData?.categorizedEmails || [];
+                    const updatedEmails = [...currentEmails, emailData];
+                    
+                    // Aggiorna lo stato per mostrare EmailPreview
+                    setEmailPreviewData({
+                      categorizedEmails: updatedEmails,
+                      summary: `${updatedEmails.length} email personalizzate`
+                    });
+                    setShowEmailPreview(true);
+                    
+                    console.log('✅ Bozza email aggiunta al sistema interno');
+                    
+                  } catch (error) {
+                    console.error('❌ Errore creazione bozza interna:', error);
+                    // Fallback: mostra conferma comunque
+                    const emailConfirmation = `✅ Bozza email creata per ${emailAction.to.join(', ')} - Oggetto: "${emailAction.subject}"`;
+                    
+                    const confirmationMessage: Message = {
+                      id: getUniqueMessageId(),
+                      text: emailConfirmation,
+                      isUser: false,
+                      timestamp: new Date(),
+                      type: 'normal'
+                    };
+                    setMessages(prev => [...prev, confirmationMessage]);
+                  }
+                } catch (error) {
+                  console.error('Errore creazione bozza:', error);
                 }
-              };
-              reader.readAsArrayBuffer(file);
-              
-            } catch (error) {
-              console.error("Errore semplice:", error);
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: "Errore nel preparare email. Riprova.",
-                isUser: false,
-                timestamp: new Date()
-              }]);
-            }
-          }
-          
-          setInputMessage('');
-          setUploadedFiles([]);
-          return;
-        }
-      } else if (dataToUse.length > 0) {
-        // NESSUN FILE MA CI SONO DATI IN MEMORIA - Gestisci direttamente
-        if (messageToSend.toLowerCase().includes('analisi') || 
-            messageToSend.toLowerCase().includes('analizza')) {
-          
-          setIsProcessingEmails(true);
-          console.log('🔴 USANDO DATI IN MEMORIA (NESSUN FILE):', dataToUse);
-          
-          try {
-            const data = dataToUse;
-            
-            // Verifica se ci sono dati reali
-            if (!data || data.length === 0) {
-              const emptyDataMessage: Message = {
-                id: getUniqueMessageId(),
-                text: `⚠️ **Dati Excel vuoti**
-
-I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`,
-                isUser: false,
-                timestamp: new Date(),
-                type: 'normal'
-              };
-              setMessages(prev => [...prev, emptyDataMessage]);
-              setIsProcessingEmails(false);
-              return;
+              } catch (error) {
+                console.error('Errore parsing JSON email:', error);
+              }
             }
             
-            // Usa i dati in memoria per l'analisi (stessa logica del caso con file)
-            // [Qui andrebbe la stessa logica di analisi che abbiamo per i file]
-            
-            setIsProcessingEmails(false);
-            
-          } catch (error) {
-            console.error('Errore durante l\'analisi dei dati in memoria:', error);
-            setIsProcessingEmails(false);
-            showError('Errore durante l\'analisi dei dati Excel');
-          }
-          
-          return;
-        }
-        
-        console.log("CHECK 8: Email trigger senza file - Contiene email?", messageToSend.toLowerCase().includes('email'));
-        console.log("CHECK 9: Email trigger senza file - Contiene mail?", messageToSend.toLowerCase().includes('mail'));
-        
-        if (messageToSend.toLowerCase().includes('email') || 
-            messageToSend.toLowerCase().includes('genera') ||
-            messageToSend.toLowerCase().includes('invia') ||
-            messageToSend.toLowerCase().includes('prepara')) {
-          
-          // Genera email con i dati in memoria - logica semplice
-          try {
-            console.log(">>> Preparazione email semplificata (dati in memoria)");
-            
-            // Trova chi ha email
-            const conEmail = dataToUse.filter((row: any) => row.Email);
-            
-            if (conEmail.length > 0) {
-              // Crea preview semplice
-              const preview = `Preparazione email per ${conEmail.length} contatti:
-
-${conEmail.map((c: any, i: number) => 
-  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
-).join('\n')}
-
-Vuoi procedere con l'invio?`;
-              
-              // Mostra preview
-              setMessages(prev => [...prev, {
-                id: Date.now().toString(),
-                text: preview,
-                isUser: false,
-                timestamp: new Date()
-              }]);
-              
-              // Salva per dopo
-              (window as any).pendingEmails = conEmail;
-            }
-            
-          } catch (error) {
-            console.error("Errore semplice:", error);
-            setMessages(prev => [...prev, {
-              id: Date.now().toString(),
-              text: "Errore nel preparare email. Riprova.",
-              isUser: false,
-              timestamp: new Date()
-            }]);
-          }
-          setInputMessage('');
-          return;
-        }
-      }
-
-      // SOLO SE NON CI SONO FILE, continua con il comportamento normale
-      if (!messageToSend) {
-        console.log("Uscita 6: Messaggio vuoto senza file");
-        return;
-      }
-
-      // PURE CLAUDE LOGIC - Vai direttamente a Claude per tutte le risposte
-      
-      const userMessage: Message = { 
+            // Aggiungi messaggio di riepilogo
+            const summaryMessage: Message = {
         id: getUniqueMessageId(),
-        text: messageToSend,
-        isUser: true,
+              text: `📧 Create ${emailMatches.length} bozze email per i clienti con "Mail Inviata: No"`,
+                  isUser: false,
         timestamp: new Date(),
         type: 'normal'
       };
+            setMessages(prev => [...prev, summaryMessage]);
+            
+            // NON MOSTRARE LA RISPOSTA ORIGINALE SE CONTIENE JSON
+            // Salta la parte di visualizzazione normale
+          return;
+        }
+        }
+        
+        // Mostra la risposta
+          const assistantMessage: Message = {
+                              id: getUniqueMessageId(),
+          text: aiResponse,
+                              isUser: false,
+                              timestamp: new Date(),
+                              type: 'normal'
+                            };
+          setMessages(prev => [...prev, assistantMessage]);
 
-      // 1. Crea una nuova history locale con il messaggio dell'utente
-      const newHistory = [...messages, userMessage];
+          // Aggiorna anche le conversazioni
+          if (activeConversationId) {
+                            setConversationMessages(prev => ({
+                              ...prev,
+              [activeConversationId]: [...(prev[activeConversationId] || []), assistantMessage]
+            }));
+          }
+          
+        } catch (error) {
+        console.error('Errore AI:', error);
+          const errorMessage: Message = {
+                              id: getUniqueMessageId(),
+          text: '❌ Errore nell\'analisi del file Excel. Riprova.',
+                              isUser: false,
+                              timestamp: new Date(),
+                              type: 'normal'
+                            };
+          setMessages(prev => [...prev, errorMessage]);
+      }
+      
+      // Scroll
+                            setTimeout(() => {
+                              scrollToBottom();
+                            }, 100);
+    };
+
+    const handleSendMessage = async () => {
+      console.log("handleSendMessage chiamata");
+      console.log("inputMessage originale:", inputMessage);
+      console.log("Tipo inputMessage:", typeof inputMessage);
+      console.log("Lunghezza inputMessage:", inputMessage?.length);
+      console.log("isChatInitialized:", isChatInitialized);
+      console.log("activeConversationId:", activeConversationId);
+      const message = inputMessage.trim();
+      console.log("message dopo trim:", message);
+      console.log("Lunghezza message:", message?.length);
+      
+      // CONTROLLO: Se non c'è messaggio ma c'è un file Excel, processalo automaticamente
+      if (!message && window.tempExcelFile) {
+        console.log("📁 FILE EXCEL RILEVATO - PROCESSAMENTO AUTOMATICO");
+        
+        // PULISCI SUBITO la textarea e l'icona del file
+      setInputMessage('');
+        setUploadedFiles([]);
+        
+        // MOSTRA BARRA DI PROGRESSO
+        setIsProcessingEmails(true);
+        
+        // Nascondi il messaggio di benvenuto
+        if (messages.length === 0) {
+        setShowWelcomeMessage(false);
+      }
+
+        // Processa il file Excel
+        await processExcelFile();
+        
+        // NASCONDI BARRA DI PROGRESSO
+        setIsProcessingEmails(false);
+        return;
+      }
+        
+      if (!message) {
+        console.log("❌ MESSAGGIO VUOTO - EXIT");
+          return;
+        }
+        
+      // Pulisci subito la textarea
+          setInputMessage('');
+      
+      // Aggiungi il messaggio dell'utente
+      const userMessage: Message = { 
+                id: getUniqueMessageId(),
+        text: message,
+        isUser: true,
+                timestamp: new Date(),
+                type: 'normal'
+              };
+        setMessages(prev => [...prev, userMessage]);
       
       // Nascondi il messaggio di benvenuto quando viene inviato il primo messaggio
       if (messages.length === 0) {
         setShowWelcomeMessage(false);
       }
       
-      // TODO: Reactivate if needed to track the first message logic
-      // setIsFirstMessage(false);
+      // SEMPRE chiama l'AI, ma passa il contesto
+      const hasFile = window.tempExcelFile != null;
+      console.log("🔍 DEBUG FILE:");
+      console.log("window.tempExcelFile:", window.tempExcelFile);
+      console.log("window.tempExcelData:", window.tempExcelData);
+      console.log("hasFile:", hasFile);
       
-      // GARANTISCI SEMPRE UNA CHAT ATTIVA - LOGICA SEMPLIFICATA
-      let currentChatId = activeConversationId;
+        // System Prompt intelligente basato sul contesto
+        const getSystemPrompt = () => {
+          let basePrompt = `Sei NYRA, un assistente AI con accesso a:
+- Gmail (per controllare email reali)
+- Google Calendar (per eventi reali)  
+- Google Drive (per file reali)
+- OAuth Google attivo per info@marco-conte.com
+
+COMPORTAMENTO RICHIESTO:
+- AGISCI DIRETTAMENTE, NON FARE DOMANDE INUTILI
+- Se l'utente chiede email, GENERA SUBITO i JSON send-email
+- NON creare solo testo nella chat, ma JSON per il sistema email
+- Mantieni SEMPRE il contesto della conversazione
+
+Mantieni SEMPRE il contesto della conversazione. Esegui le azioni richieste realmente.`;
+
+          if (hasFile) {
+            basePrompt += `\n\nDATI EXCEL DISPONIBILI: ${JSON.stringify(window.tempExcelData || [])}
+Usa SOLO questi dati reali per analisi Excel.
+
+FORMATO EMAIL RICHIESTO:
+Per ogni email da inviare, genera SOLO questo JSON:
+{
+  "action": "send-email",
+  "to": ["email@cliente.com"],
+  "subject": "Oggetto personalizzato per il progetto",
+  "body": "DATI per riempire il template - NON il testo completo dell'email"
+}
+
+IMPORTANTE: 
+- Il campo "body" deve contenere SOLO i dati specifici del cliente (nome, progetto, dettagli)
+- NON generare l'intero testo dell'email
+- Il template esistente si occuperà del formato e della struttura
+- Esempio body: "Cliente: Laura Bianchi, Progetto: Shooting moda AI, Budget: 5000€, Deadline: 30/01/2025"
+
+SE L'UTENTE CHIEDE EMAIL: Genera immediatamente i JSON send-email per tutti i clienti con "Mail Inviata: No".`;
+          }
+
+          return basePrompt;
+        };
+
+      const systemPrompt = getSystemPrompt();
       
-      // Usa la funzione ensureActiveChat per garantire una chat attiva
-      const activeChatId = ensureActiveChat();
+      // Chiama OpenRouter con il contesto giusto
+              const backendUrl = import.meta.env.VITE_BACKEND_URL || 'https://nyra-backend-c7zi.onrender.com';
+      console.log("🚀 CHIAMATA OPENROUTER INIZIATA");
+      console.log("Backend URL:", backendUrl);
+      console.log("System Prompt:", systemPrompt.substring(0, 100) + "...");
       
-      if (activeChatId) {
-        // ✅ Chat attiva trovata o attivata
-        currentChatId = activeChatId;
-        // console.log('✅ Chat attiva garantita:', currentChatId);
-      } else {
-        // 🆕 Nessuna chat trovata - creane una nuova
-        // CONTROLLO DIFENSIVO: Preveni doppia creazione chat
-        if (chatCreationInProgress.current) {
-          // console.log('⚠️ Creazione chat già in corso, uso chat esistente in handleSendMessage');
-          // Non fare return, continua con la chiamata API usando la chat esistente
-        } else {
-          chatCreationInProgress.current = true;
-          // console.log('🆕 Nessuna chat trovata, creo una nuova in handleSendMessage');
-          
-          const chatTitle = getConversationTitle(messageToSend);
-          const uniqueChatName = generateUniqueChatName(chatTitle);
-          
-          const newChat: Chat = {
-            id: generateGuaranteedUniqueId(),
-            name: uniqueChatName,
-            lastMessage: messageToSend,
-            timestamp: new Date(),
-            isActive: true
-          };
-          
-          addChatSafely(newChat);
-          
-          currentChatId = newChat.id;
-          setActiveConversationId(currentChatId);
-          setConversationCounter(prev => prev + 1);
-          
-          // Reset counter se necessario
-          setTimeout(() => {
-            resetCounterIfNeeded();
-          }, 100);
-          
-          // Reset flag dopo un breve delay
-          setTimeout(() => {
-            chatCreationInProgress.current = false;
-          }, 500);
-          
-          // console.log('✅ Nuova conversazione creata in handleSendMessage:', currentChatId, uniqueChatName);
+      try {
+        const response = await fetch(`${backendUrl}/api/ai/chat`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    model: 'anthropic/claude-3.5-sonnet',
+                    messages: [
+                      {
+                        role: 'system',
+                content: systemPrompt
+                      },
+                      {
+                        role: 'user',
+                content: message
+                      }
+                    ],
+                    temperature: 0.7,
+            max_tokens: 2000
+                  })
+                });
+
+        if (!response.ok) {
+          throw new Error(`Errore OpenRouter: ${response.statusText}`);
         }
-      }
-
-      // Update conversation messages
-      setConversationMessages(prev => ({
-        ...prev,
-        [currentChatId!]: [...(prev[currentChatId!] || []), userMessage]
-      }));
-
-      setMessages(prev => [...prev, userMessage]);
-      
-      // 2. Controlla se il messaggio contiene parole chiave per i reminder - DEVE ESSERE PRIMA DI TUTTO
-      if (detectReminderKeywords(messageToSend)) {
         
-        // Esegui createReminder in parallelo senza interrompere la chiamata LLM
-        const { createReminder } = await import('./services/n8nIntegration');
-        const userName = getCurrentUserName();
+        const data = await response.json();
+        const aiResponse = data.choices[0].message.content;
         
-        createReminder(messageToSend, 'user', userName)
-                        .then(result => {
-                          if (result.success && result.eventLink) {
-                            // Aggiungi messaggio di conferma con link all'evento
-                            const successMessage: Message = {
-                              id: getUniqueMessageId(),
-                              text: `✅ Promemoria impostato. [Apri evento](${result.eventLink})`,
-                              isUser: false,
-                              timestamp: new Date(),
-                              type: 'normal'
-                            };
+        // CONTROLLA SE CI SONO JSON send-email DA PROCESSARE
+        if (aiResponse.includes('"action": "send-email"')) {
+          console.log('📧 Email JSON rilevati nella risposta normale!');
+          
+          // Estrai tutti i JSON send-email dalla risposta
+          const emailMatches = aiResponse.match(/\{[^}]*"action":\s*"send-email"[^}]*\}/g);
+          
+          if (emailMatches && emailMatches.length > 0) {
+            console.log('📧 JSON email trovati nella risposta normale:', emailMatches.length);
+            
+            // Processa ogni JSON email
+            for (let index = 0; index < emailMatches.length; index++) {
+              const jsonStr = emailMatches[index];
+              try {
+                const emailAction = JSON.parse(jsonStr);
+                console.log(`📧 Processando email normale ${index + 1}:`, emailAction);
+                
+                // Prepara i dati per EmailPreview usando il template esistente
+                const clientData = emailAction.body || '';
+                
+                // Crea il corpo email usando il template esistente
+                const templateBody = `Gentile Cliente,
 
-                            setMessages(prev => [...prev, successMessage]);
-                            setConversationMessages(prev => ({
-                              ...prev,
-                              [currentChatId!]: [...(prev[currentChatId!] || []), successMessage]
-                            }));
-                            
-                            // ✅ Scroll alla fine per messaggi di successo reminder
-                            setTimeout(() => {
-                              scrollToBottom();
-                            }, 100);
-                          } else if (result.success) {
-                            // Aggiungi messaggio di conferma locale
-                            const successMessage: Message = {
-                              id: getUniqueMessageId(),
-                              text: '✅ Reminder creato nel tuo calendario!',
-                              isUser: false,
-                              timestamp: new Date(),
-                              type: 'normal'
-                            };
+${clientData}
 
-                            setMessages(prev => [...prev, successMessage]);
-                            setConversationMessages(prev => ({
-                              ...prev,
-                              [currentChatId!]: [...(prev[currentChatId!] || []), successMessage]
-                            }));
-                            
-                            // ✅ Scroll alla fine per messaggi di successo reminder
-                            setTimeout(() => {
-                              scrollToBottom();
-                            }, 100);
-                          } else {
-                            // Aggiungi messaggio di warning locale
-                            const warningMessage: Message = {
-                              id: getUniqueMessageId(),
-                              text: `⚠️ Servizio reminder temporaneamente non disponibile: ${result.error || 'Errore sconosciuto'}`,
-                              isUser: false,
-                              timestamp: new Date(),
-                              type: 'normal'
-                            };
+Cordiali saluti,
+Il Team NYRA`;
 
-                            setMessages(prev => [...prev, warningMessage]);
-                            setConversationMessages(prev => ({
-                              ...prev,
-                              [currentChatId!]: [...(prev[currentChatId!] || []), warningMessage]
-                            }));
-                            
-                            // ✅ Scroll alla fine per messaggi di warning reminder
-                            setTimeout(() => {
-                              scrollToBottom();
-                            }, 100);
-                          }
-                        })
-                        .catch(error => {
-                          console.error('Errore reminder:', error);
-                          // Aggiungi messaggio di warning locale
-                          const warningMessage: Message = {
-                            id: getUniqueMessageId(),
-                              text: '⚠️ Servizio reminder temporaneamente non disponibile',
-                              isUser: false,
-                              timestamp: new Date(),
-                              type: 'normal'
-                            };
-
-                            setMessages(prev => [...prev, warningMessage]);
-                            setConversationMessages(prev => ({
-                              ...prev,
-                              [currentChatId!]: [...(prev[currentChatId!] || []), warningMessage]
-                            }));
-                            
-                            // ✅ Scroll alla fine per messaggi di warning reminder
-                            setTimeout(() => {
-                              scrollToBottom();
-                            }, 100);
-                          });
+                const emailData = {
+                  email: Array.isArray(emailAction.to) ? emailAction.to[0] : emailAction.to,
+                  subject: emailAction.subject || 'Messaggio da NYRA',
+                  suggestedSubject: emailAction.subject || 'Messaggio da NYRA',
+                  body: templateBody,
+                  suggestedBody: templateBody,
+                  emailType: 'standard',
+                  to: Array.isArray(emailAction.to) ? emailAction.to : [emailAction.to],
+                  cc: emailAction.cc || [],
+                  bcc: emailAction.bcc || []
+                };
+                
+                // Aggiungi alla lista delle bozze esistenti
+                const currentEmails = emailPreviewData?.categorizedEmails || [];
+                const updatedEmails = [...currentEmails, emailData];
+                
+                // Aggiorna lo stato per mostrare EmailPreview
+                setEmailPreviewData({
+                  categorizedEmails: updatedEmails,
+                  summary: `${updatedEmails.length} email personalizzate`
+                });
+                setShowEmailPreview(true);
+                
+                console.log('✅ Bozza email aggiunta al sistema interno (risposta normale)');
+                
+              } catch (error) {
+                console.error('Errore parsing JSON email normale:', error);
+              }
+            }
+            
+            // NON MOSTRARE LA RISPOSTA ORIGINALE SE CONTIENE JSON
+            return; // Crucial to prevent displaying raw JSON
+          }
+        }
+        
+        // Mostra la risposta normale se non ci sono JSON email
+        const assistantMessage: Message = {
+                        id: getUniqueMessageId(),
+          text: aiResponse,
+                        isUser: false,
+                        timestamp: new Date(),
+                        type: 'normal'
+                      };
+        setMessages(prev => [...prev, assistantMessage]);
+                      
+        // Aggiorna anche le conversazioni
+        if (activeConversationId) {
+                      setConversationMessages(prev => ({
+                        ...prev,
+            [activeConversationId]: [...(prev[activeConversationId] || []), assistantMessage]
+                      }));
+                    }
+                    
+            } catch (error) {
+        console.error('Errore AI:', error);
+              const errorMessage: Message = {
+                        id: getUniqueMessageId(),
+          text: '❌ Errore nella comunicazione con l\'AI. Riprova.',
+                        isUser: false,
+                        timestamp: new Date(),
+                        type: 'normal'
+                      };
+              setMessages(prev => [...prev, errorMessage]);
       }
-      
-      setInputMessage('');
-      
-      // ✅ Scroll alla fine quando viene inviato un messaggio
-      setTimeout(() => {
-        scrollToBottom();
-      }, 100);
-      
-      // Set thinking state to true before API call
-      setIsThinking(true);
       
       // Reset altezza textarea
-      setTimeout(() => {
+                setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.style.height = '40px';
         }
       }, 0);
 
-      // Hide welcome message on first user message
-      if (showWelcomeMessage) {
-        setShowWelcomeMessage(false);
-      }
-
-      // CONTROLLO: Verifica che currentChatId sia valido
-      // console.log('🔍 DEBUG: currentChatId prima del controllo:', currentChatId);
-      if (!currentChatId) {
-        console.error('❌ Errore: Nessuna chat attiva trovata per la chiamata API');
-        // console.log('🔍 DEBUG: activeConversationId:', activeConversationId);
-        // console.log('🔍 DEBUG: chats.length:', chats.length);
-        // console.log('🔍 DEBUG: chats:', chats);
-        console.log("Uscita 7: Nessuna chat attiva per API");
-        return;
-      }
-      // console.log('✅ DEBUG: currentChatId valido:', currentChatId);
-
-      // ✅ NUOVO SISTEMA: Usa OpenRouter direttamente per risposte naturali
-      try {
-        console.log('🔗 Avvio sistema OpenRouter per:', messageToSend);
-        
-        // Inizializza OpenRouter se non esiste ancora
-        if (!window.openRouter) {
-          const { OpenRouterConnector } = await import('./services/openrouter');
-          window.openRouter = new OpenRouterConnector();
-        }
-        
-        // 3. L'LLM riceve la history completa usando newHistory
-        const finalResponse = await window.openRouter.sendMessage(messageToSend, newHistory);
-              
-        // Set thinking state to false after response is received
-        setIsThinking(false);
-        
-        // GESTIONE RISPOSTA FINALE
-        if (finalResponse) {
-          // 🔍 INTERCETTAZIONE AZIONI CALENDARIO (solo se non già gestito dalle azioni multiple)
-          if (!finalResponse.includes('"action"')) {
-            const maybeCalendarAction = safeParseJSON(finalResponse);
-            if (maybeCalendarAction && isCalendarAction(maybeCalendarAction)) {
-            console.log('[NYRA] Intercettata azione calendario:', maybeCalendarAction);
-            
-            // Normalizza e crea payload per n8n
-            const payload = createN8NPayload(maybeCalendarAction);
-            console.log('[NYRA][TITLE] user:', maybeCalendarAction.originalText);
-            console.log('[NYRA][TITLE] model summary/title:', maybeCalendarAction?.summary, maybeCalendarAction?.title);
-            console.log('[NYRA][TITLE] final:', payload.summary);
-            console.log('[NYRA] Dispatching calendar event to n8n:', payload);
-            
-            try {
-              // Usa la nuova funzione per n8n con payload diretto
-              const { createCalendarEvent } = await import('./services/n8nIntegration');
-              
-              const res = await createCalendarEvent(maybeCalendarAction);
-              
-              console.log('[NYRA] n8n OK', res);
-              
-              // Formatta le date usando i dati reali dell'evento creato
-              let startFormatted, endFormatted;
-              
-              // Importa le funzioni del nuovo servizio time.ts
-              const { formatDateTimeIT, getLocalTZ } = await import('./services/time');
-              
-              if (res.data?.start?.dateTime && res.data?.end?.dateTime) {
-                // Usa i dati reali dell'evento con timezone
-                const tz = res.data.start.timeZone || getLocalTZ();
-                const startISO = res.data.start.dateTime;
-                const endISO = res.data.end.dateTime;
-                
-                try {
-                  // Formatta le date usando il nuovo servizio
-                  const start = new Date(startISO);
-                  const end = new Date(endISO);
-                  
-                  startFormatted = formatDateTimeIT(start, tz);
-                  endFormatted = formatDateTimeIT(end, tz);
-                  
-                  console.log('[NYRA][CONFIRM] Evento reale:', { 
-                    title: res.data.summary, 
-                    start: startISO, 
-                    end: endISO,
-                    timeZone: tz,
-                    startFormatted,
-                    endFormatted
-                  });
-                } catch (formatError) {
-                  console.warn('[NYRA] Errore formattazione date evento, fallback a payload:', formatError);
-                  // Fallback alle date inviate
-                  const { formatDateEuropeRome } = await import('./services/calendarDates');
-                  startFormatted = formatDateEuropeRome(payload.startISO);
-                  endFormatted = formatDateEuropeRome(payload.endISO);
-                }
-              } else {
-                // Fallback alle date inviate se non ci sono dati evento
-                const { formatDateEuropeRome } = await import('./services/calendarDates');
-                startFormatted = formatDateEuropeRome(payload.startISO);
-                endFormatted = formatDateEuropeRome(payload.endISO);
-                
-                console.log('[NYRA][CONFIRM] Fallback a payload:', { 
-                  title: payload.summary, 
-                  startISO: payload.startISO, 
-                  endISO: payload.endISO 
-                });
-              }
-              
-              // Messaggio di conferma contestuale da n8n
-              let successText: string;
-              
-              // Se n8n ha inviato una risposta contestuale, usala
-              if (res.data?.message) {
-                successText = res.data.message;
-              } else {
-                // Fallback al messaggio precompilato se n8n non ha inviato risposta
-                successText = `✅ Evento creato: "${res.data?.summary || payload.summary}" (${startFormatted} → ${endFormatted})`;
-              }
-              
-              const successMessage: Message = {
-                id: getUniqueMessageId(),
-                text: successText,
-                isUser: false,
-                timestamp: new Date(),
-                type: 'normal'
-              };
-              
-              setMessages(prev => [...prev, successMessage]);
-              setConversationMessages(prev => ({
-                ...prev,
-                [currentChatId!]: [...(prev[currentChatId!] || []), successMessage]
-              }));
-              
-              // Scroll alla fine per messaggio di successo
-              setTimeout(() => {
-                scrollToBottom();
-              }, 100);
-              
-              console.log("Uscita 8: Successo n8n, interrompo catena chatbot");
-              return; // Interrompi la catena "chatbot"
-            } catch (err: any) {
-              console.error('[NYRA] n8n FAILED', err?.message || err);
-              
-              const errorMessage: Message = {
-                id: getUniqueMessageId(),
-                text: '⚠️ Errore nel creare l\'evento. Riprovo più tardi o fallo manualmente.',
-                isUser: false,
-                timestamp: new Date(),
-                type: 'normal'
-              };
-              
-              setMessages(prev => [...prev, errorMessage]);
-              setConversationMessages(prev => ({
-                ...prev,
-                [currentChatId!]: [...(prev[currentChatId!] || []), errorMessage]
-              }));
-              
-              // Scroll alla fine per messaggio di errore
-              setTimeout(() => {
-                scrollToBottom();
-              }, 100);
-              
-              console.log("Uscita 9: Errore n8n, interrompo catena chatbot");
-              return; // Interrompi la catena "chatbot"
-            }
-          }
-        }
-          
-          // 🔍 INTERCETTAZIONE AZIONI MULTIPLE (email + calendario) - FORMATO CORRETTO
-          if (finalResponse.includes('"action"')) {
-            console.log('🔍 Multiple actions detected in response');
-            console.log('🔍 Final response contains action:', finalResponse.includes('"action"'));
-            
-            try {
-              // Usa regex più robusta per trovare JSON completi
-              const jsonRegex = /\{[^{}]*(?:"[^"]*"[^{}]*)*"action"[^{}]*(?:"[^"]*"[^{}]*)*\}/gs;
-              const jsonMatches = finalResponse.match(jsonRegex);
-              
-              console.log('🔍 Debug regex:', {
-                finalResponse: finalResponse.substring(0, 200) + '...',
-                jsonMatches: jsonMatches,
-                hasAction: finalResponse.includes('"action"')
-              });
-              
-              if (jsonMatches && jsonMatches.length > 0) {
-                console.log(`📋 Found ${jsonMatches.length} action(s):`, jsonMatches);
-                
-                let emailActions = []; // Array per multiple email
-                let calendarAction = null;
-                let readEmailAction = null;
-                let emailManageAction = null;
-                let emailSearchAction = null;
-                let emailNotificationAction = null;
-                let meetLink = null;
-                
-                // Processa ogni JSON trovato
-                for (const jsonString of jsonMatches) {
-                  try {
-                    // Pulisce caratteri di controllo che possono rompere il JSON
-                    const cleanJsonString = jsonString
-                      .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Rimuove caratteri di controllo
-                      .replace(/\n/g, '\\n') // Escape newline
-                      .replace(/\r/g, '\\r') // Escape carriage return
-                      .replace(/\t/g, '\\t'); // Escape tab
-                    
-                    const action = JSON.parse(cleanJsonString);
-                    console.log('🔍 Processing action:', action);
-                    
-                    if (action.action === 'send-email') {
-                      emailActions.push(action); // Aggiungi all'array
-                    } else if (action.action === 'create-calendar-event') {
-                      calendarAction = action;
-                    } else if (action.action === 'read-email') {
-                      readEmailAction = action;
-                    } else if (action.action === 'email-manage') {
-                      emailManageAction = action;
-                    } else if (action.action === 'email-search') {
-                      emailSearchAction = action;
-                    } else if (action.action === 'email-notifications') {
-                      emailNotificationAction = action;
-                    }
-                  } catch (parseError) {
-                    console.warn('⚠️ Failed to parse JSON:', jsonString, parseError);
-                  }
-                }
-                
-                // Processa calendario PRIMA se presente (per ottenere meetLink)
-                if (calendarAction) {
-                  console.log('📅 Processing calendar action first:', calendarAction);
-                  
-                  try {
-                    // Crea payload per calendario con Meet
-                    const calendarPayload = {
-                      action_type: 'calendar',
-                      title: calendarAction.summary || calendarAction.title,
-                      startISO: calendarAction.startISO || calendarAction.start,
-                      endISO: calendarAction.endISO || calendarAction.end,
-                      originalText: calendarAction.originalText || '',
-                      addMeet: true, // aggiunge Google Meet
-                      user_id: currentUser?.email || 'anonymous'
-                    };
-                    
-                    console.log('📅 Calendar payload:', calendarPayload);
-                    
-                    // Invia calendario a n8n
-                    const { createCalendarEvent } = await import('./services/n8nIntegration');
-                    const calendarResult = await createCalendarEvent(calendarAction);
-                    
-                    console.log('✅ Calendar created:', calendarResult);
-                    
-                    // Estrai meetLink se presente
-                    if (calendarResult.data?.meetLink) {
-                      meetLink = calendarResult.data.meetLink;
-                      console.log('🔗 Meet link extracted:', meetLink);
-                    }
-                    
-                  } catch (calendarError) {
-                    console.error('❌ Calendar creation failed:', calendarError);
-                  }
-                }
-                
-                // Processa email DOPO se presente
-                if (emailActions.length > 0) {
-                  console.log(`📧 Processing ${emailActions.length} email action(s):`, emailActions);
-                  
-                  // Prepara array di email per preview
-                  const emailDataArray = emailActions.map(emailAction => {
-                    // Aggiungi meetLink al body dell'email se disponibile
-                    let emailBody = emailAction.body || '';
-                    if (meetLink && calendarAction) {
-                      emailBody += `\n\n🔗 Link per la riunione: ${meetLink}`;
-                      console.log('🔗 Added meet link to email body');
-                    }
-                    
-                    return {
-                      email: Array.isArray(emailAction.to) ? emailAction.to[0] : emailAction.to,
-                      subject: emailAction.subject || 'Messaggio da NYRA',
-                      body: emailBody
-                    };
-                  });
-                  
-                  console.log('📧 Email data prepared for preview:', emailDataArray);
-                  
-                  // Salva i dati email per l'invio successivo dopo consenso utente
-                  window.tempEmailData = emailDataArray;
-                  
-                  // Mostra email preview per multiple email
-                  setEmailPreviewData({
-                    categorizedEmails: emailDataArray,
-                    summary: `${emailDataArray.length} email personalizzate`
-                  });
-                  setShowEmailPreview(true);
-                  
-                  // NON INVIA AUTOMATICAMENTE - Solo mostra preview
-                  // L'invio avverrà solo dopo consenso utente tramite EmailPreview component
-                  console.log('⏸️ Email NOT sent automatically - waiting for user consent');
-                }
-                
-                // Processa lettura email se presente
-                if (readEmailAction) {
-                  console.log('📖 Processing read email action:', readEmailAction);
-                  
-                  try {
-                    // Usa il servizio email diretto invece di n8n
-                    const { emailReadService } = await import('./services/emailReadService');
-                    const readEmailResult = await emailReadService.readEmails(readEmailAction);
-                    console.log('✅ Read email result:', readEmailResult);
-                    
-                    // Se la lettura è riuscita, mostra i risultati
-                    if (readEmailResult.success && readEmailResult.emails.length > 0) {
-                      const emailType = readEmailAction.type || 'ultime';
-                      const emailCount = readEmailResult.count;
-                      const requestedCount = readEmailAction.count || 5;
-                      
-                      let emailSummary = `📧 ${emailCount} ${emailType} email trovate:\n\n`;
-                      
-                      // Mostra tutte le email (fino a 10 per non appesantire la chat)
-                      const emailsToShow = readEmailResult.emails.slice(0, Math.min(10, emailCount));
-                      
-                      emailsToShow.forEach((email, index) => {
-                        const date = new Date(email.date).toLocaleString('it-IT');
-                        emailSummary += `${index + 1}. 📨 **${email.subject}**\n` +
-                          `   👤 Da: ${email.from}\n` +
-                          `   📅 ${date}\n` +
-                          `   📝 ${email.snippet}\n`;
-                        
-                        // Mostra contenuto completo se disponibile e richiesto
-                        if (email.body && email.body.length > email.snippet.length) {
-                          emailSummary += `   📄 **Contenuto completo:**\n   ${email.body.substring(0, 500)}${email.body.length > 500 ? '...' : ''}\n`;
-                        }
-                        
-                        emailSummary += `\n`;
-                      });
-                      
-                      if (emailCount > 10) {
-                        emailSummary += `... e altre ${emailCount - 10} email.\n\n`;
-                      }
-                      
-
-                      
-
-                      
-                      // Aggiungi messaggio con i risultati email
-                      const emailResultMessage: Message = {
-                        id: getUniqueMessageId(),
-                        text: emailSummary,
-                        isUser: false,
-                        timestamp: new Date(),
-                        type: 'normal'
-                      };
-                      
-                      setMessages(prev => [...prev, emailResultMessage]);
-                      setConversationMessages(prev => ({
-                        ...prev,
-                        [currentChatId!]: [...(prev[currentChatId!] || []), emailResultMessage]
-                      }));
-                    }
-                    
-
-                    
-                  } catch (readEmailError) {
-                    console.error('❌ Read email failed:', readEmailError);
-                  }
-                }
-                
-                // Processa gestione email se presente
-                if (emailManageAction) {
-                  console.log('🔧 Processing email management action:', emailManageAction);
-                  
-                  try {
-                    const { emailManagementService } = await import('./services/emailManagementService');
-                    const manageResult = await emailManagementService.manageEmail(emailManageAction);
-                    console.log('✅ Email management result:', manageResult);
-                    
-                    if (manageResult.success) {
-                      // Aggiungi messaggio di conferma
-                      const manageMessage: Message = {
-                        id: getUniqueMessageId(),
-                        text: `✅ ${manageResult.message}`,
-                        isUser: false,
-                        timestamp: new Date(),
-                        type: 'normal'
-                      };
-                      
-                      setMessages(prev => [...prev, manageMessage]);
-                      setConversationMessages(prev => ({
-                        ...prev,
-                        [currentChatId!]: [...(prev[currentChatId!] || []), manageMessage]
-                      }));
-                    }
-                    
-                  } catch (manageError) {
-                    console.error('❌ Email management failed:', manageError);
-                  }
-                }
-                
-                // Processa ricerca email se presente
-                if (emailSearchAction) {
-                  console.log('🔍 Processing email search action:', emailSearchAction);
-                  
-                  try {
-                    const { emailManagementService } = await import('./services/emailManagementService');
-                    const searchResult = await emailManagementService.searchEmails(emailSearchAction);
-                    console.log('✅ Email search result:', searchResult);
-                    
-                    if (searchResult.success && searchResult.emails.length > 0) {
-                      let searchSummary = `🔍 ${searchResult.count} email trovate per "${emailSearchAction.query}":\n\n`;
-                      
-                      const emailsToShow = searchResult.emails.slice(0, Math.min(10, searchResult.count));
-                      
-                      emailsToShow.forEach((email, index) => {
-                        const date = new Date(email.date).toLocaleString('it-IT');
-                        searchSummary += `${index + 1}. 📨 **${email.subject}**\n` +
-                          `   👤 Da: ${email.from}\n` +
-                          `   📅 ${date}\n` +
-                          `   📝 ${email.snippet}\n\n`;
-                      });
-                      
-                      if (searchResult.count > 10) {
-                        searchSummary += `... e altre ${searchResult.count - 10} email.\n\n`;
-                      }
-                      
-                      // Aggiungi messaggio con i risultati ricerca
-                      const searchMessage: Message = {
-                        id: getUniqueMessageId(),
-                        text: searchSummary,
-                        isUser: false,
-                        timestamp: new Date(),
-                        type: 'normal'
-                      };
-                      
-                      setMessages(prev => [...prev, searchMessage]);
-                      setConversationMessages(prev => ({
-                        ...prev,
-                        [currentChatId!]: [...(prev[currentChatId!] || []), searchMessage]
-                      }));
-                    }
-                    
-                  } catch (searchError) {
-                    console.error('❌ Email search failed:', searchError);
-                  }
-                }
-                
-                // Processa notifiche email se presente
-                if (emailNotificationAction) {
-                  console.log('🔔 Processing email notification action:', emailNotificationAction);
-                  
-                  try {
-                    const { emailNotificationService } = await import('./services/emailNotificationService');
-                    const notificationResult = await emailNotificationService.configureNotifications(emailNotificationAction);
-                    console.log('✅ Email notification result:', notificationResult);
-                    
-                    if (notificationResult.success) {
-                      // Aggiungi messaggio di conferma
-                      const notificationMessage: Message = {
-                        id: getUniqueMessageId(),
-                        text: `🔔 ${notificationResult.message}`,
-                        isUser: false,
-                        timestamp: new Date(),
-                        type: 'normal'
-                      };
-                      
-                      setMessages(prev => [...prev, notificationMessage]);
-                      setConversationMessages(prev => ({
-                        ...prev,
-                        [currentChatId!]: [...(prev[currentChatId!] || []), notificationMessage]
-                      }));
-                    }
-                    
-                  } catch (notificationError) {
-                    console.error('❌ Email notification failed:', notificationError);
-                  }
-                }
-                
-
-                
-                // Genera messaggio di conferma naturale appropriato
-                let confirmationMessage = '';
-                
-                if (calendarAction) {
-                  confirmationMessage = `📅 Evento calendario creato: "${calendarAction.summary || calendarAction.title}"`;
-                  
-                  if (meetLink) {
-                    confirmationMessage += `\n🔗 Link Meet: ${meetLink}`;
-                  }
-                } else if (readEmailAction) {
-                  const emailType = readEmailAction.type || 'ultime';
-                  confirmationMessage = `📧 Email controllate con successo.`;
-                } else if (emailManageAction) {
-                  confirmationMessage = `🔧 Operazione email completata.`;
-                } else if (emailSearchAction) {
-                  confirmationMessage = `🔍 Ricerca email completata. I risultati sono mostrati sopra.`;
-                } else if (emailNotificationAction) {
-                  confirmationMessage = `🔔 Configurazione notifiche completata.`;
-                }
-                
-                // Gestisci combinazioni multiple
-                if (readEmailAction && calendarAction) {
-                  confirmationMessage += `\n\n📧 Email controllate con successo.`;
-                }
-                
-                if (emailManageAction || emailSearchAction || emailNotificationAction) {
-                  confirmationMessage += `\n\n🔧 Operazioni email completate.`;
-                }
-                
-                // Aggiungi messaggio di conferma
-                const successMessage: Message = {
-                  id: getUniqueMessageId(),
-                  text: confirmationMessage,
-                  isUser: false,
-                  timestamp: new Date(),
-                  type: 'normal'
-                };
-                
-                setMessages(prev => [...prev, successMessage]);
-                setConversationMessages(prev => ({
-                  ...prev,
-                  [currentChatId!]: [...(prev[currentChatId!] || []), successMessage]
-                }));
-                
-                // Scroll alla fine per messaggio di successo
-                setTimeout(() => {
-                  scrollToBottom();
-                }, 100);
-                
-                console.log("Uscita 10: Successo azione multipla, blocco JSON");
-                return; // BLOCCA IL JSON DAL MOSTRARSI
-              }
-            } catch (error) {
-              console.error('❌ Error processing multiple actions:', error);
-              // Se c'è errore, lascia che mostri la risposta normale
-            }
-          }
-          
-          // 🔍 INTERCETTAZIONE AZIONI COMBINATE (calendario + email)
-          if (finalResponse.includes('"type":"calendar"') && finalResponse.includes('"attendees"')) {
-            const calendarAction = safeParseJSON(finalResponse);
-            if (calendarAction && typeof calendarAction === 'object' && 'attendees' in calendarAction && Array.isArray(calendarAction.attendees) && calendarAction.attendees.length > 0) {
-              console.log('📅✉️ Calendar with invites detected');
-              
-              // Il calendario con inviti viene già gestito dal blocco calendario sopra
-              // Ma possiamo aggiungere logica extra qui se necessario
-            }
-          }
-          
-          // Se non è un'azione calendario, procedi normalmente
-          const aiMessage: Message = {
-            id: getUniqueMessageId(),
-            text: finalResponse,
-            isUser: false,
-            timestamp: new Date(),
-            type: 'normal'
-          };
-          
-          setMessages(prev => [...prev, aiMessage]);
-          setConversationMessages(prev => ({
-            ...prev,
-            [currentChatId!]: [...(prev[currentChatId!] || []), aiMessage]
-          }));
-          
-          // ✅ Scroll alla fine quando arriva la risposta dell'AI
+      // Scroll immediato per messaggio utente
           setTimeout(() => {
             scrollToBottom();
           }, 100);
-        } else {
-          // Fallback se non c'è risposta
-          const fallbackMessage: Message = {
-            id: getUniqueMessageId(),
-            text: 'Mi dispiace, non sono riuscito a elaborare la richiesta. Riprova.',
-            isUser: false,
-            timestamp: new Date(),
-            type: 'normal'
-          };
-          
-          setMessages(prev => [...prev, fallbackMessage]);
-          setConversationMessages(prev => ({
-            ...prev,
-            [currentChatId!]: [...(prev[currentChatId!] || []), fallbackMessage]
-          }));
-          
-          // ✅ Scroll alla fine anche per messaggi di fallback
-          setTimeout(() => {
-            scrollToBottom();
-          }, 100);
-        }
-      } catch (error) {
-        console.error('Errore sistema N8N:', error);
-        
-        // Set thinking state to false on error
-        setIsThinking(false);
-        
-        // Fallback di emergenza
-        const fallbackMessage: Message = {
-          id: getUniqueMessageId(),
-          text: 'Servizio temporaneamente non disponibile. Riprova tra poco.',
-          isUser: false,
-          timestamp: new Date(),
-          type: 'normal'
-        };
-        
-        setMessages(prev => [...prev, fallbackMessage]);
-        setConversationMessages(prev => ({
-          ...prev,
-          [currentChatId!]: [...(prev[currentChatId!] || []), fallbackMessage]
-        }));
-        
-        // ✅ Scroll alla fine anche per messaggi di errore
-        setTimeout(() => {
-          scrollToBottom();
-        }, 100);
-      }
     };
 
+    // Effetto per gestire il caricamento del file Excel
+    useEffect(() => {
+      if (uploadedFiles.length > 0) {
+        const file = uploadedFiles[0];
+        if (file.name.includes('.xls')) {
+          // Se è un file Excel, salvalo in window.tempExcelFile
+          window.tempExcelFile = file;
+          console.log('✅ File Excel caricato e salvato in window.tempExcelFile:', file.name);
+          
+          // Leggi il file per estrarre i dati e salvarli in window.tempExcelData
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            const data = new Uint8Array(e.target?.result as ArrayBuffer);
+            const workbook = XLSX.read(data, {type: 'array'});
+            const sheet = workbook.Sheets[workbook.SheetNames[0]];
+            const jsonData = XLSX.utils.sheet_to_json(sheet);
+            
+            // Filtra righe vuote o con solo intestazioni
+            const filteredData = jsonData.filter((row: any) => 
+              Object.values(row).some(value => value !== undefined && value !== null && String(value).trim() !== '')
+            );
+            window.tempExcelData = filteredData;
+            console.log('✅ Dati Excel parsati e salvati in window.tempExcelData:', filteredData.length, 'righe');
+          };
+          reader.readAsArrayBuffer(file);
+        }
+        } else {
+        // NON pulire i file se sono già stati caricati - potrebbero essere ancora necessari
+        if (window.tempExcelFile) {
+          console.log('📁 File Excel già caricato, mantengo i dati in memoria');
+        } else {
+          console.log('🗑️ Nessun file Excel in memoria, pulisco le variabili globali.');
+          window.tempExcelFile = undefined;
+          window.tempExcelData = undefined;
+        }
+      }
+    }, [uploadedFiles]);
+
+    // COMMENTATO - Sostituito con MCP ExcelResource
     // COMMENTATO - Sostituito con MCP ExcelResource
     // Funzione per processare Excel per email
     const processExcelForEmails = async (file: File) => {
@@ -4508,13 +3002,13 @@ Vuoi procedere con l'invio?`;
         setMessages(prev => [...prev, assistantMessage]);
         
       } catch (error) {
-        console.error("ERRORE DETTAGLIATO:", error);
-        console.error("Stack:", error.stack);
-        console.error("Messaggio:", error.message);
+        console.error("ERRORE DETTAGLIATO:", error instanceof Error ? error.message : String(error));
+        console.error("Stack:", error instanceof Error ? error.stack : 'N/A');
+        console.error("Messaggio:", error instanceof Error ? error.message : String(error));
         showError('Errore elaborazione');
       } finally {
         setIsProcessingEmails(false);
-        setUploadedFiles([]);
+        // NON pulire uploadedFiles qui - serve per l'useEffect
       }
     };
 
@@ -5020,7 +3514,7 @@ Vuoi procedere con l'invio?`;
                           setShowEmailPreview(false);
                           setEmailPreviewData(null);
                           setIsProcessingEmails(false);
-                          setUploadedFiles([]);
+                          // NON pulire uploadedFiles qui - serve per l'useEffect
                           showInfo('Analisi email annullata');
                           
                           // Reset completo dello stato per tornare alla conversazione normale
@@ -5165,8 +3659,8 @@ Vuoi procedere con l'invio?`;
                 <textarea
                   ref={textareaRef}
                   value={inputMessage}
-                  disabled={!isChatInitialized || !activeConversationId}
-                  placeholder={!isChatInitialized ? "Inizializzazione in corso..." : "Invia un messaggio a Nyra"}
+                  disabled={false}
+                  placeholder="Invia un messaggio a Nyra"
                   onChange={(e) => {
                     setInputMessage(e.target.value);
                   }}

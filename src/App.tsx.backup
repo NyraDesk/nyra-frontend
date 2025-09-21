@@ -3,6 +3,35 @@ import { EXTERNAL_APIS } from './config/external-apis';
 import { API_URL } from './config/api';
 import { ExcelResource } from './mcp/excel-resource';
 
+// Funzione per formattazione generica dell'analisi Excel
+const formatAnalysis = (data: any) => {
+  let output = `📊 ANALISI FILE EXCEL\n\n`;
+  output += `📈 Totale record trovati: ${data.totalRecords}\n\n`;
+  
+  // Se ci sono dati, mostra preview
+  if (data.preview && data.preview.length > 0) {
+    output += `📋 ANTEPRIMA DATI (primi ${data.preview.length} record):\n`;
+    output += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    
+    data.preview.forEach((row: any, index: number) => {
+      output += `Record ${index + 1}:\n`;
+      // Mostra TUTTI i campi che trova, qualsiasi essi siano
+      Object.keys(row).forEach(key => {
+        output += `  • ${key}: ${row[key]}\n`;
+      });
+      output += `\n`;
+    });
+  }
+  
+  // Mostra le colonne trovate
+  if (data.preview.length > 0) {
+    const columns = Object.keys(data.preview[0]);
+    output += `📊 Colonne identificate: ${columns.join(', ')}\n`;
+  }
+  
+  return output;
+};
+
 // Estendi l'interfaccia Window per le proprietà personalizzate
 declare global {
   interface Window {
@@ -615,6 +644,26 @@ function App() {
 
     const removeFile = (index: number) => {
       setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+    };
+
+    // Handle file selection from input
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || []);
+      const excelFiles = files.filter(file => 
+        file.name.toLowerCase().endsWith('.xlsx') || 
+        file.name.toLowerCase().endsWith('.xls') ||
+        file.name.toLowerCase().endsWith('.csv')
+      );
+      
+      if (excelFiles.length > 0) {
+        setUploadedFiles(prev => [...prev, ...excelFiles]);
+        console.log("File Excel selezionato, in attesa di istruzioni");
+      } else {
+        showError('Solo file Excel (.xlsx, .xls, .csv) sono supportati');
+      }
+      
+      // Reset input value
+      e.target.value = '';
     };
 
 
@@ -2303,7 +2352,7 @@ function App() {
             const workbook = XLSX.read(data, { type: 'binary' });
             const sheetName = workbook.SheetNames[0];
             const worksheet = workbook.Sheets[sheetName];
-               const jsonData = XLSX.utils.sheet_to_json(worksheet);
+            const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
                // Rimuovi righe con "PROGETTI CLIENTI" o "Data:"
                const cleanData = jsonData.filter((row: any) => {
@@ -2373,7 +2422,212 @@ function App() {
         
         setInputMessage('');
         
+        // PRIMA prova a capire con intelligenza
+        const lowerMessage = messageToSend.toLowerCase();
+
+        // Pattern intelligenti (non solo parole chiave)
+        const wantsEmail = 
+          (lowerMessage.includes('contatt') && lowerMessage.includes('client')) ||
+          (lowerMessage.includes('scriv') && window.tempExcelFile) ||
+          (lowerMessage.includes('comunica') && window.tempExcelFile) ||
+          (lowerMessage.match(/invi\w+\s+(a|ai|per)/)) || // "invia a", "inviare ai"
+          (lowerMessage.includes('email') && !lowerMessage.includes('non')) ||
+          (lowerMessage.includes('messag') && window.tempExcelFile);
+
+        const wantsAnalysis = 
+          (lowerMessage.includes('cosa') && lowerMessage.includes('pensi')) ||
+          (lowerMessage.includes('dimmi') && window.tempExcelFile) ||
+          (lowerMessage.includes('mostra') && lowerMessage.includes('dat')) ||
+          (lowerMessage.includes('report')) ||
+          (lowerMessage.includes('riassumi'));
+
+        // USA l'intelligenza PRIMA dei trigger rigidi
+        if (window.tempExcelFile) {
+          if (wantsEmail) {
+            console.log(">>> Capito intelligentemente: vuole email");
+            // Logica semplice per email
+            try {
+              console.log(">>> Preparazione email semplificata (intelligenza)");
+              
+              // Leggi Excel
+              const reader = new FileReader();
+              reader.onload = async (e) => {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(sheet);
+                
+                // Trova chi ha email
+                const conEmail = jsonData.filter((row: any) => row.Email);
+                
+                if (conEmail.length > 0) {
+                  // Crea preview semplice
+                  const preview = `Preparazione email per ${conEmail.length} contatti:
+
+${conEmail.map((c: any, i: number) => 
+  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
+).join('\n')}
+
+Vuoi procedere con l'invio?`;
+                  
+                  // Mostra preview
+                  setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    text: preview,
+                    isUser: false,
+                    timestamp: new Date()
+                  }]);
+                  
+                  // Salva per dopo
+                  (window as any).pendingEmails = conEmail;
+                }
+              };
+              reader.readAsArrayBuffer(window.tempExcelFile);
+              
+            } catch (error) {
+              console.error("Errore semplice:", error);
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: "Errore nel preparare email. Riprova.",
+                isUser: false,
+                timestamp: new Date()
+              }]);
+            }
+            return;
+          }
+          
+          if (wantsAnalysis) {
+            console.log(">>> Capito intelligentemente: vuole analisi");
+            // Logica semplice per analisi
+            try {
+              console.log(">>> Analisi Excel semplificata (intelligenza)");
+              
+              // Leggi Excel
+              const reader = new FileReader();
+              reader.onload = async (e) => {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(sheet);
+                
+                // Analisi semplice
+                const totalRecords = jsonData.length;
+                const withEmail = jsonData.filter((row: any) => row.Email).length;
+                const columns = Object.keys(jsonData[0] || {});
+                
+                const analysis = `## Analisi del file: ${window.tempExcelFile?.name || 'Excel'}
+
+**Riepilogo:** ${totalRecords} record analizzati
+
+### Statistiche:
+- **Record totali:** ${totalRecords}
+- **Con email:** ${withEmail} (${Math.round(withEmail/totalRecords*100)}%)
+- **Colonne:** ${columns.join(', ')}
+
+### Anteprima dati:
+${jsonData.slice(0, 3).map((row: any, i: number) => 
+  `Record ${i+1}: ${Object.entries(row).map(([k,v]) => `${k}: ${v}`).join(', ')}`
+).join('\n')}
+
+### Suggerimenti:
+${withEmail > 0 ? `- Posso preparare email per ${withEmail} contatti` : '- Nessuna email trovata'}
+- Posso creare report dettagliato
+- Posso esportare dati in altri formati`;
+
+                // Mostra analisi
+                setMessages(prev => [...prev, {
+                  id: Date.now().toString(),
+                  text: analysis,
+                  isUser: false,
+                  timestamp: new Date()
+                }]);
+              };
+              reader.readAsArrayBuffer(window.tempExcelFile);
+              
+            } catch (error) {
+              console.error("Errore analisi:", error);
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: "Errore nell'analisi. Riprova.",
+                isUser: false,
+                timestamp: new Date()
+              }]);
+            }
+            return;
+          }
+        }
+
+        // SOLO SE non capisce, usa i vecchi trigger come fallback
+        // PRIMO CHECK - rileva richieste email in modo intelligente
+        if ((messageToSend.toLowerCase().match(/\d+\s*(mail|email)/i) ||  // "3 mail"
+             messageToSend.toLowerCase().includes('bozza') ||              // "bozza"
+             (messageToSend.toLowerCase().includes('prepara') && 
+              messageToSend.toLowerCase().includes('mail')) ||             // "prepara mail"
+             messageToSend.toLowerCase().includes('email')) && 
+             window.tempExcelFile) {
+          
+          console.log(">>> TRIGGER EMAIL MULTIPLE ATTIVATO");
+          console.log("🔍 File disponibile:", window.tempExcelFile);
+          console.log("🔍 Nome file:", window.tempExcelFile?.name);
+          console.log("🔍 Tipo file:", typeof window.tempExcelFile);
+          console.log("🔍 È File object?", window.tempExcelFile instanceof File);
+          
+          // Logica semplice per email
+          try {
+            console.log(">>> Preparazione email semplificata");
+            
+            // Leggi Excel
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+              const data = new Uint8Array(e.target?.result as ArrayBuffer);
+              const workbook = XLSX.read(data, {type: 'array'});
+              const sheet = workbook.Sheets[workbook.SheetNames[0]];
+              const jsonData = XLSX.utils.sheet_to_json(sheet);
+              
+              // Trova chi ha email
+              const conEmail = jsonData.filter((row: any) => row.Email);
+              
+              if (conEmail.length > 0) {
+                // Crea preview semplice
+                const preview = `Preparazione email per ${conEmail.length} contatti:
+
+${conEmail.map((c: any, i: number) => 
+  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
+).join('\n')}
+
+Vuoi procedere con l'invio?`;
+                
+                // Mostra preview
+                setMessages(prev => [...prev, {
+                  id: Date.now().toString(),
+                  text: preview,
+                  isUser: false,
+                  timestamp: new Date()
+                }]);
+                
+                // Salva per dopo
+                (window as any).pendingEmails = conEmail;
+              }
+            };
+            reader.readAsArrayBuffer(window.tempExcelFile);
+            
+          } catch (error) {
+            console.error("Errore semplice:", error);
+            setMessages(prev => [...prev, {
+              id: Date.now().toString(),
+              text: "Errore nel preparare email. Riprova.",
+              isUser: false,
+              timestamp: new Date()
+            }]);
+          }
+          return; // STOP qui, non continuare
+        }
+        
         // Check se l'utente vuole analizzare Excel per email
+        console.log("CHECK 1: Contiene mail?", messageToSend.toLowerCase().includes('mail'));
+        console.log("CHECK 2: Contiene email?", messageToSend.toLowerCase().includes('email'));
+        console.log("CHECK 3: Uploaded files length:", uploadedFiles.length);
+        
         if ((messageToSend.toLowerCase().includes('email') || 
              messageToSend.toLowerCase().includes('mail') ||
              messageToSend.toLowerCase().includes('invia') ||
@@ -2381,7 +2635,54 @@ function App() {
             uploadedFiles.length > 0 &&
             uploadedFiles[0].name.includes('.xls')) {
           
-          await processExcelForEmails(uploadedFiles[0]);
+          // Logica semplice per email (vecchio controllo)
+          try {
+            console.log(">>> Preparazione email semplificata (vecchio controllo)");
+            
+            // Leggi Excel
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+              const data = new Uint8Array(e.target?.result as ArrayBuffer);
+              const workbook = XLSX.read(data, {type: 'array'});
+              const sheet = workbook.Sheets[workbook.SheetNames[0]];
+              const jsonData = XLSX.utils.sheet_to_json(sheet);
+              
+              // Trova chi ha email
+              const conEmail = jsonData.filter((row: any) => row.Email);
+              
+              if (conEmail.length > 0) {
+                // Crea preview semplice
+                const preview = `Preparazione email per ${conEmail.length} contatti:
+
+${conEmail.map((c: any, i: number) => 
+  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
+).join('\n')}
+
+Vuoi procedere con l'invio?`;
+                
+                // Mostra preview
+                setMessages(prev => [...prev, {
+                  id: Date.now().toString(),
+                  text: preview,
+                  isUser: false,
+                  timestamp: new Date()
+                }]);
+                
+                // Salva per dopo
+                (window as any).pendingEmails = conEmail;
+              }
+            };
+            reader.readAsArrayBuffer(uploadedFiles[0]);
+            
+          } catch (error) {
+            console.error("Errore semplice:", error);
+            setMessages(prev => [...prev, {
+              id: Date.now().toString(),
+              text: "Errore nel preparare email. Riprova.",
+              isUser: false,
+              timestamp: new Date()
+            }]);
+          }
           console.log("Uscita 1: Processo Excel per email (vecchio controllo)");
           return;
         }
@@ -2541,17 +2842,143 @@ Rispondi con:
           return;
         }
         
-        // Se scrive "analisi" o "analizza" - USA NUOVO SISTEMA MCP
+        // Se scrive "analisi" o "analizza" - USA AI INTELLIGENTE
+        console.log("CHECK 4: Contiene analisi?", messageToSend.toLowerCase().includes('analisi'));
+        console.log("CHECK 5: Contiene analizza?", messageToSend.toLowerCase().includes('analizza'));
+        
         if (messageToSend.toLowerCase().includes('analisi') || 
             messageToSend.toLowerCase().includes('analizza')) {
           
-          // Usa nuovo sistema MCP
           const excelResource = new ExcelResource();
           
-          console.log('Analisi richiesta - Dati già disponibili:', dataToAnalyze.length > 0);
-          console.log('Analisi richiesta - File disponibile:', fileToAnalyze?.name);
+          if (window.tempExcelFile) {
+            try {
+              console.log('🔴 DEBUG: Inizio analisi Excel');
+              console.log('🔴 DEBUG: File:', window.tempExcelFile.name, window.tempExcelFile.size);
+              
+              // Ottieni TUTTI i dati
+              const result = await excelResource.analyze(window.tempExcelFile);
+              console.log('🔴 DEBUG: Risultato analisi:', result);
+              
+              // Crea prompt INTELLIGENTE per l'AI
+              const aiPrompt = `Sei NYRA, assistente AI strategico per analisi business.
+
+STILE DI OUTPUT RICHIESTO:
+- Inizia SEMPRE con un ALERT se ci sono opportunità perse
+- Usa ## per titoli principali
+- Usa **grassetto** per numeri e percentuali chiave
+- Fornisci SEMPRE azioni concrete numerate
+- Linguaggio diretto e business-oriented
+- ZERO emoji
+
+I dati del file Excel sono:
+${JSON.stringify(result.data)}
+
+L'utente chiede: "${messageToSend}"
+
+STRUTTURA OBBLIGATORIA DELLA RISPOSTA:
+
+## Analisi Strategica - [Nome File]
+
+**ALERT:** [Evidenzia subito il problema/opportunità principale]
+
+### AZIONI IMMEDIATE (cosa fare SUBITO):
+1. [Azione specifica con nome cliente/progetto]
+2. [Azione specifica con nome cliente/progetto]
+3. [Azione specifica con nome cliente/progetto]
+
+### METRICHE CHIAVE:
+- **[Metrica]:** [Valore] - [Implicazione]
+- **[Metrica]:** [Valore] - [Implicazione]
+
+### OPPORTUNITÀ IDENTIFICATE:
+- [Opportunità concreta basata sui dati]
+- [Cross-selling o upselling possibile]
+
+### PIANO 3 GIORNI:
+**Giorno 1:** [Azione specifica]
+**Giorno 2:** [Azione specifica]
+**Giorno 3:** [Azione specifica]
+
+ESEMPI DI OUTPUT:
+
+Per file con email non inviate:
+"**ALERT:** 6 clienti su 10 non contattati (60% opportunità perse)"
+
+Per progetti urgenti:
+"**ALERT:** 5 progetti marcati urgenti richiedono azione immediata"
+
+Per contatti email:
+"### AZIONI IMMEDIATE:
+1. Inviare email a Laura Bianchi per progetto Moda AI (non contattata)
+2. Follow-up con Giulia Verdi per collaborazione editoriale (proposta ferma)
+3. Schedulare meeting con Elena Conti per presentazione fotografica"
+
+IMPORTANTE: Sii SPECIFICO. Usa i NOMI reali dal file. Suggerisci AZIONI concrete, non consigli generici.
+
+### AZIONE IMMEDIATA DA FARE ORA:
+Proponi UNA sola azione specifica che l'utente può fare SUBITO.
+Esempio: "Vuoi che prepari ora l'email per Laura Bianchi con proposta shooting AI? Dimmi solo 'sì' e la creo."
+
+NON dire cose generiche come "invia proposte" ma sii SPECIFICO:
+- "Preparo email per Laura Bianchi?"
+- "Creo calendario follow-up per i 6 non contattati?"
+- "Genero template email personalizzato per settore moda?"
+
+L'utente deve poter rispondere solo "sì" o "fai quello" per procedere.`;
+
+              console.log("PROMPT STRATEGICO APPLICATO - v2");
+              console.log("🔴 PROMPT INVIATO (PRIMO BLOCCO):", aiPrompt);
+              console.log("🔴 BLOCCO ATTIVO: window.openRouter.sendMessage()");
+
+              // Inizializza OpenRouter se non esiste ancora
+              if (!window.openRouter) {
+                console.log('🔴 DEBUG: Inizializzo OpenRouter');
+                const { OpenRouterConnector } = await import('./services/openrouter');
+                window.openRouter = new OpenRouterConnector();
+              }
+              
+              console.log('🔴 DEBUG: Invio prompt a OpenRouter');
+              console.log('🔴 DEBUG: Prompt length:', aiPrompt.length);
+              
+              // Invia all'AI per analisi VERA
+              const aiResponse = await window.openRouter.sendMessage(aiPrompt, []);
+              console.log("🔴 RISPOSTA RICEVUTA (PRIMO BLOCCO):", aiResponse);
+              
+              // Mostra la risposta INTELLIGENTE dell'AI
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: aiResponse,
+                isUser: false,
+                timestamp: new Date()
+              }]);
+              
+            } catch (error) {
+              console.error('🔴 ERRORE ANALISI:', error);
+              console.error('🔴 ERRORE STACK:', error.stack);
+              console.error('🔴 ERRORE MESSAGE:', error.message);
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: `❌ Errore nell'analisi: ${error.message}\n\nDettagli nel console. Riprova.`,
+                isUser: false,
+                timestamp: new Date()
+              }]);
+            }
+          } else {
+            setMessages(prev => [...prev, {
+              id: Date.now().toString(),
+              text: "⚠️ Carica prima un file Excel",
+              isUser: false,
+              timestamp: new Date()
+            }]);
+          }
           
-          // Se non ci sono dati e non c'è file, mostra messaggio di errore
+          setInputMessage('');
+          return;
+        }
+
+        // COMMENTATO - CODICE VECCHIO SOSTITUITO CON MCP
+        /*
           if (dataToAnalyze.length === 0 && !fileToAnalyze) {
             const noDataMessage: Message = {
               id: getUniqueMessageId(),
@@ -2671,7 +3098,7 @@ IMPORTANTE: Usa SOLO i dati reali dal file. Non inventare nulla.
 Concentrati su AZIONI PRATICHE che l'utente può fare subito.
 
 TERMINA sempre con una domanda diretta su cosa fare.
-`;
+              `;
               console.log('🔴 PROMPT COMPLETO INVIATO:', analysisPrompt);
               
               // Verifica se il backend è disponibile
@@ -2750,6 +3177,9 @@ ${(() => {
                 // DELAY per far vedere i dati
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
+                console.log("🔴 PROMPT INVIATO (SECONDO BLOCCO):", analysisPrompt);
+                console.log("🔴 BLOCCO ATTIVO: Backend API con prompt migliorato");
+                
                 // CHIAMATA REALE AL BACKEND
                 const openRouterResponse = await fetch(`${backendUrl}/api/ai/chat`, {
                   method: 'POST',
@@ -2761,7 +3191,49 @@ ${(() => {
                     messages: [
                       {
                         role: 'system',
-                        content: 'Sei NYRA, un assistente AI specializzato nell\'analisi di dati Excel aziendali. Analizza i dati e rispondi alle domande dell\'utente. Proponi azioni solo quando richiesto esplicitamente.'
+                        content: `Sei NYRA, assistente AI professionale per analisi dati.
+
+REGOLE DI FORMATTAZIONE:
+- USA markdown per struttura chiara (##, **, liste)
+- NIENTE emoji nel testo
+- Linguaggio professionale ma accessibile
+- Risposte concise ma complete
+
+STRUTTURA ANALISI:
+1. Inizia SEMPRE con: "## Analisi del file: [nome_file]"
+2. Poi un breve riepilogo: "**Riepilogo:** X record analizzati"
+3. Sezioni principali con ## per ogni aspetto importante
+4. Usa liste puntate per dettagli
+5. Numeri e percentuali in **grassetto**
+
+QUANDO TROVI EMAIL:
+- Conta quante email valide ci sono
+- Se l'utente non ha chiesto nulla di specifico, suggerisci: "Ho identificato X indirizzi email. Posso preparare una campagna email personalizzata se necessario."
+
+INTELLIGENZA CONTESTUALE:
+- Se l'utente chiede qualcosa di specifico, rispondi SOLO a quello
+- Se chiede analisi generica, fornisci overview completa
+- Adatta il livello di dettaglio alla complessità dei dati
+
+ESEMPIO OUTPUT:
+## Analisi del file: clienti.xlsx
+
+**Riepilogo:** 10 record analizzati con informazioni complete
+
+### Distribuzione per categoria
+- Settore Tech: **4 contatti** (40%)
+- Settore Moda: **3 contatti** (30%)
+- Altri: **3 contatti** (30%)
+
+### Opportunità identificate
+Ho trovato **10 indirizzi email validi**. Posso preparare comunicazioni mirate per settore se necessario.
+
+### Prossimi passi suggeriti
+- Segmentazione per settore per campagne mirate
+- Export dei dati in formato diverso
+- Creazione di report dettagliato
+
+Ricorda: professionale, strutturato, senza emoji, intelligente nel contesto.`
                       },
                       {
                         role: 'user',
@@ -2774,6 +3246,7 @@ ${(() => {
                 });
 
                 const aiResult = await openRouterResponse.json();
+                console.log("🔴 RISPOSTA RICEVUTA (SECONDO BLOCCO):", aiResult);
 
                 // I dati del file sono già stati mostrati nel rettangolo
 
@@ -2929,8 +3402,12 @@ Oppure carica un nuovo file Excel per iniziare.`,
             return;
           }
         }
+        */
 
         // Se scrive "genera" o "email" con file - USA DATI SALVATI
+        console.log("CHECK 6: Email trigger con file - Contiene email?", messageToSend.toLowerCase().includes('email'));
+        console.log("CHECK 7: Email trigger con file - Contiene mail?", messageToSend.toLowerCase().includes('mail'));
+        
         if (messageToSend.toLowerCase().includes('email') || 
             messageToSend.toLowerCase().includes('genera') ||
             messageToSend.toLowerCase().includes('invia') ||
@@ -2938,11 +3415,94 @@ Oppure carica un nuovo file Excel per iniziare.`,
           
           if (window.tempExcelData && window.tempExcelData.length > 0) {
             // Genera email con i dati già analizzati
-            await processExcelForEmails(window.tempExcelData);
-            window.tempExcelData = null;
+            // Logica semplice per email con dati salvati
+            try {
+              console.log(">>> Preparazione email semplificata (dati salvati)");
+              
+              // Trova chi ha email
+              const conEmail = window.tempExcelData.filter((row: any) => row.Email);
+              
+              if (conEmail.length > 0) {
+                // Crea preview semplice
+                const preview = `Preparazione email per ${conEmail.length} contatti:
+
+${conEmail.map((c: any, i: number) => 
+  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
+).join('\n')}
+
+Vuoi procedere con l'invio?`;
+                
+                // Mostra preview
+                setMessages(prev => [...prev, {
+                  id: Date.now().toString(),
+                  text: preview,
+                  isUser: false,
+                  timestamp: new Date()
+                }]);
+                
+                // Salva per dopo
+                (window as any).pendingEmails = conEmail;
+              }
+              window.tempExcelData = null;
+              
+            } catch (error) {
+              console.error("Errore semplice:", error);
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: "Errore nel preparare email. Riprova.",
+                isUser: false,
+                timestamp: new Date()
+              }]);
+            }
           } else {
             // Se non ci sono dati salvati, usa il file originale
-            await processExcelForEmails(file);
+            try {
+              console.log(">>> Preparazione email semplificata (file originale)");
+              
+              // Leggi Excel
+              const reader = new FileReader();
+              reader.onload = async (e) => {
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const sheet = workbook.Sheets[workbook.SheetNames[0]];
+                const jsonData = XLSX.utils.sheet_to_json(sheet);
+                
+                // Trova chi ha email
+                const conEmail = jsonData.filter((row: any) => row.Email);
+                
+                if (conEmail.length > 0) {
+                  // Crea preview semplice
+                  const preview = `Preparazione email per ${conEmail.length} contatti:
+
+${conEmail.map((c: any, i: number) => 
+  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
+).join('\n')}
+
+Vuoi procedere con l'invio?`;
+                  
+                  // Mostra preview
+                  setMessages(prev => [...prev, {
+                    id: Date.now().toString(),
+                    text: preview,
+                    isUser: false,
+                    timestamp: new Date()
+                  }]);
+                  
+                  // Salva per dopo
+                  (window as any).pendingEmails = conEmail;
+                }
+              };
+              reader.readAsArrayBuffer(file);
+              
+            } catch (error) {
+              console.error("Errore semplice:", error);
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: "Errore nel preparare email. Riprova.",
+                isUser: false,
+                timestamp: new Date()
+              }]);
+            }
           }
           
           setInputMessage('');
@@ -2990,13 +3550,52 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
           return;
         }
         
+        console.log("CHECK 8: Email trigger senza file - Contiene email?", messageToSend.toLowerCase().includes('email'));
+        console.log("CHECK 9: Email trigger senza file - Contiene mail?", messageToSend.toLowerCase().includes('mail'));
+        
         if (messageToSend.toLowerCase().includes('email') || 
             messageToSend.toLowerCase().includes('genera') ||
             messageToSend.toLowerCase().includes('invia') ||
             messageToSend.toLowerCase().includes('prepara')) {
           
-          // Genera email con i dati in memoria
-          await processExcelForEmails(dataToUse);
+          // Genera email con i dati in memoria - logica semplice
+          try {
+            console.log(">>> Preparazione email semplificata (dati in memoria)");
+            
+            // Trova chi ha email
+            const conEmail = dataToUse.filter((row: any) => row.Email);
+            
+            if (conEmail.length > 0) {
+              // Crea preview semplice
+              const preview = `Preparazione email per ${conEmail.length} contatti:
+
+${conEmail.map((c: any, i: number) => 
+  `${i+1}. ${c.Nome || 'Nome'} - ${c.Email}`
+).join('\n')}
+
+Vuoi procedere con l'invio?`;
+              
+              // Mostra preview
+              setMessages(prev => [...prev, {
+                id: Date.now().toString(),
+                text: preview,
+                isUser: false,
+                timestamp: new Date()
+              }]);
+              
+              // Salva per dopo
+              (window as any).pendingEmails = conEmail;
+            }
+            
+          } catch (error) {
+            console.error("Errore semplice:", error);
+            setMessages(prev => [...prev, {
+              id: Date.now().toString(),
+              text: "Errore nel preparare email. Riprova.",
+              isUser: false,
+              timestamp: new Date()
+            }]);
+          }
           setInputMessage('');
           return;
         }
@@ -3810,15 +4409,22 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
     };
 
     // COMMENTATO - Sostituito con MCP ExcelResource
-    /*
     // Funzione per processare Excel per email
     const processExcelForEmails = async (file: File) => {
+      console.log("🔍 DEBUG processExcelForEmails:");
+      console.log("File Excel:", window.tempExcelFile);
+      console.log("Tipo file:", typeof window.tempExcelFile);
+      console.log("File parametro:", file);
+      console.log("Tipo parametro:", typeof file);
+      
       setIsProcessingEmails(true);
       setShowEmailPreview(false);
       
       try {
+        console.log("🔍 Tentativo lettura Excel...");
         // Leggi il file Excel
         const rawData = await analyzeExcelForEmails(file);
+        console.log("✅ Excel letto con successo:", rawData);
         
         // USA L'AI PER GENERARE EMAIL REALI
         const recentMessages = messages.slice(-5).map(m => `${m.isUser ? 'Utente' : 'NYRA'}: ${m.text}`).join('\n');
@@ -3902,14 +4508,15 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
         setMessages(prev => [...prev, assistantMessage]);
         
       } catch (error) {
-        console.error('Errore:', error);
+        console.error("ERRORE DETTAGLIATO:", error);
+        console.error("Stack:", error.stack);
+        console.error("Messaggio:", error.message);
         showError('Errore elaborazione');
       } finally {
         setIsProcessingEmails(false);
         setUploadedFiles([]);
       }
     };
-    */
 
     // Funzione per inviare le email
     const handleSendEmails = async (selectedIndexes: number[], modifiedEmails?: any[]) => {
@@ -4362,7 +4969,8 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
             {messages.length > 0 && (
               <div className="messages-container">
                 <div className="messages">
-                  {messages.map((message, index) => (
+                  {messages.map((message, index) => {
+                    return (
                     <div key={message.id} className={`message ${message.isUser ? 'user' : 'ai'}`}>
                       {message.isUser ? (
                         <div className="message-content">
@@ -4399,7 +5007,8 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
                         />
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                   
                   {/* Email Preview Component */}
                   {showEmailPreview && emailPreviewData && (
@@ -4487,7 +5096,20 @@ I dati salvati in memoria sono vuoti. Carica un nuovo file Excel per l'analisi.`
             {/* Input Area */}
             <div className="input-section">
               <div className="input-container">
-                <button className="input-action-btn">
+                {/* Hidden file input */}
+                <input
+                  type="file"
+                  id="file-upload-input"
+                  className="hidden"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileSelect}
+                />
+                
+                <button 
+                  className="input-action-btn"
+                  onClick={() => document.getElementById('file-upload-input')?.click()}
+                  title="Carica file Excel"
+                >
                   <Plus size={18} />
                 </button>
                 
