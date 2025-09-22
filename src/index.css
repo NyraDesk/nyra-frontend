@@ -7,6 +7,157 @@
   display: none !important;
 }
 
+/* Email Cards - Stile NYRA */
+.email-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-amount));
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  padding: 20px;
+  margin: 12px 0;
+  box-shadow: var(--shadow-light);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+
+.email-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--accent-color), var(--accent-secondary));
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.email-card:hover {
+  transform: translateY(-4px);
+  box-shadow: var(--shadow-medium);
+  border-color: var(--accent-color);
+}
+
+.email-card:hover::before {
+  opacity: 1;
+}
+
+.email-card-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.email-number {
+  background: linear-gradient(135deg, var(--accent-color), var(--accent-secondary));
+  color: white;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-inner);
+}
+
+.email-subject {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  flex: 1;
+}
+
+.email-card-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding: 12px 16px;
+  background: var(--frosted-glass);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+}
+
+.email-from {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.email-sender-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.email-sender-address {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, 'Courier New', monospace;
+}
+
+.email-date {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  background: var(--icy-reflection);
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+}
+
+.email-card-preview {
+  background: var(--frosted-glass);
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  line-height: 1.6;
+  font-size: 14px;
+  max-height: 120px;
+  overflow: hidden;
+  position: relative;
+}
+
+.email-card-preview::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 20px;
+  background: linear-gradient(transparent, var(--frosted-glass));
+  pointer-events: none;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .email-card {
+    padding: 16px;
+    margin: 8px 0;
+  }
+  
+  .email-card-header {
+    gap: 12px;
+  }
+  
+  .email-subject {
+    font-size: 16px;
+  }
+  
+  .email-card-meta {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+}
+
 /* Animazioni per la tab dinamica */
 @keyframes pulse {
   0%, 100% {

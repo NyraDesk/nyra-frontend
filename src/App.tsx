@@ -53,6 +53,7 @@ import { isEmailAction, createN8NEmailPayload, EmailAction } from './services/em
 import { getDynamicGreeting, getLocalTZ } from './services/time';
 import { ExcelService, analyzeExcelForEmails } from './services/excelService';
 import { EmailPreview } from './components/EmailPreview';
+import { EmailCard } from './components/EmailCard';
 import {
   Plus, MessageSquare, Mic, Settings as SettingsIcon, User, Moon, Sun, Send,
   Mail, Calendar, FolderOpen, Globe, Menu, X, Clock, Eye, EyeOff,
@@ -66,6 +67,13 @@ interface Message {
   timestamp: Date;
   type?: 'thinking' | 'normal' | 'excel-analysis';
   status?: 'connecting' | 'processing' | 'local' | 'completed' | 'analyzing';
+  emailCards?: Array<{
+    id: string;
+    subject: string;
+    from: string;
+    date: string;
+    snippet: string;
+  }>;
 }
 
 interface MessageComponentProps {
@@ -2547,7 +2555,7 @@ Il Team NYRA`;
                     const confirmationMessage: Message = {
               id: getUniqueMessageId(),
                       text: emailConfirmation,
-              isUser: false,
+                isUser: false,
               timestamp: new Date(),
               type: 'normal'
             };
@@ -2565,7 +2573,7 @@ Il Team NYRA`;
             const summaryMessage: Message = {
                 id: getUniqueMessageId(),
               text: `📧 Create ${emailMatches.length} bozze email per i clienti con "Mail Inviata: No"`,
-                isUser: false,
+                  isUser: false,
                 timestamp: new Date(),
                 type: 'normal'
               };
@@ -2573,10 +2581,11 @@ Il Team NYRA`;
             
             // NON MOSTRARE LA RISPOSTA ORIGINALE SE CONTIENE JSON
             // Salta la parte di visualizzazione normale
-          return;
-        }
+              return;
+            }
         }
         
+
         // PROCESSAMENTO JSON EMAIL - CREA BOZZE REALI
         if (aiResponse.includes('"action": "send-email"') || aiResponse.toLowerCase().includes('json')) {
           console.log('📧 Processando JSON email per creare bozze...');
@@ -2610,8 +2619,8 @@ Il Team NYRA`;
                 
                 allEmails.push(emailData);
                 console.log(`✅ Bozza email creata per: ${emailAction.to}`);
-                
-              } catch (error) {
+            
+          } catch (error) {
                 console.error(`❌ Errore parsing email ${index + 1}:`, error);
               }
             }
@@ -2625,12 +2634,12 @@ Il Team NYRA`;
               setShowEmailPreview(true);
               
               const summaryMessage: Message = {
-                id: getUniqueMessageId(),
+        id: getUniqueMessageId(),
                 text: `✅ Create ${allEmails.length} bozze email personalizzate per i clienti. Le puoi modificare e inviare dall'interfaccia email.`,
-                isUser: false,
-                timestamp: new Date(),
-                type: 'normal'
-              };
+              isUser: false,
+        timestamp: new Date(),
+        type: 'normal'
+      };
               setMessages(prev => [...prev, summaryMessage]);
             }
           }
@@ -2640,18 +2649,18 @@ Il Team NYRA`;
         
         // Mostra la risposta solo se non ci sono email
           const assistantMessage: Message = {
-        id: getUniqueMessageId(),
+            id: getUniqueMessageId(),
           text: aiResponse,
-                              isUser: false,
-                              timestamp: new Date(),
-                              type: 'normal'
-                            };
+            isUser: false,
+            timestamp: new Date(),
+            type: 'normal'
+          };
           setMessages(prev => [...prev, assistantMessage]);
-
+          
           // Aggiorna anche le conversazioni
           if (activeConversationId) {
-                            setConversationMessages(prev => ({
-                              ...prev,
+            setConversationMessages(prev => ({
+              ...prev,
               [activeConversationId]: [...(prev[activeConversationId] || []), assistantMessage]
             }));
           }
@@ -2659,19 +2668,19 @@ Il Team NYRA`;
         } catch (error) {
         console.error('Errore AI:', error);
           const errorMessage: Message = {
-                              id: getUniqueMessageId(),
+            id: getUniqueMessageId(),
           text: '❌ Errore nell\'analisi del file Excel. Riprova.',
-                              isUser: false,
-                              timestamp: new Date(),
-                              type: 'normal'
-                            };
+            isUser: false,
+            timestamp: new Date(),
+            type: 'normal'
+          };
           setMessages(prev => [...prev, errorMessage]);
       }
       
       // Scroll
-                            setTimeout(() => {
-                              scrollToBottom();
-                            }, 100);
+          setTimeout(() => {
+            scrollToBottom();
+          }, 100);
     };
 
     const handleSendMessage = async () => {
@@ -2694,7 +2703,7 @@ Il Team NYRA`;
         setUploadedFiles([]); // Pulisci l'icona del file dalla textarea
         
         // MOSTRA BARRA DI PROGRESSO
-        setIsProcessingEmails(true);
+          setIsProcessingEmails(true);
         
         // Nascondi il messaggio di benvenuto
         if (messages.length === 0) {
@@ -2705,9 +2714,9 @@ Il Team NYRA`;
         await processExcelFile();
         
         // NASCONDI BARRA DI PROGRESSO
-        setIsProcessingEmails(false);
-        return;
-      }
+              setIsProcessingEmails(false);
+          return;
+        }
         
       if (!message) {
         console.log("❌ MESSAGGIO VUOTO - EXIT");
@@ -2719,12 +2728,12 @@ Il Team NYRA`;
       
       // Aggiungi il messaggio dell'utente
       const userMessage: Message = { 
-                id: getUniqueMessageId(),
+              id: getUniqueMessageId(),
         text: message,
         isUser: true,
-                timestamp: new Date(),
-                type: 'normal'
-              };
+              timestamp: new Date(),
+              type: 'normal'
+            };
         setMessages(prev => [...prev, userMessage]);
       
       // Nascondi il messaggio di benvenuto quando viene inviato il primo messaggio
@@ -2741,23 +2750,72 @@ Il Team NYRA`;
       
         // System Prompt intelligente basato sul contesto
         const getSystemPrompt = () => {
-          let basePrompt = `Sei NYRA, un assistente AI con accesso a:
+          // Prendi il contesto della conversazione
+          const conversationContext = messages.length > 0 ? 
+            messages.slice(-5).map(msg => `${msg.isUser ? 'Utente' : 'NYRA'}: ${msg.text}`).join('\n') : 
+            'Nessuna conversazione precedente';
+          
+          let basePrompt = `Sei NYRA, un assistente AI personale intelligente con accesso a:
 - Gmail (per controllare email reali)
 - Google Calendar (per eventi reali)  
 - Google Drive (per file reali)
 - OAuth Google attivo per l'account dell'utente collegato
 
+CONTESTO DELLA CONVERSAZIONE:
+${conversationContext}
+
 COMPORTAMENTO RICHIESTO:
-- AGISCI DIRETTAMENTE, NON FARE DOMANDE INUTILI
-- Se l'utente chiede email, GENERA SUBITO le email send-email con contenuto dettagliato e professionale
-- NON creare solo testo nella chat, ma email per il sistema email
-- Mantieni SEMPRE il contesto della conversazione
-- NON CHIEDERE CONFERMA: agisci immediatamente
-- Per le email: usa contenuto professionale, dettagli specifici del progetto, proposte concrete, informazioni sui servizi, prezzi, tempistiche
-- Per Gmail: hai accesso completo all'account dell'utente collegato per leggere e inviare email
+- SII INTELLIGENTE E CONTESTUALE, NON AUTOMATICO
+- ANALIZZA il messaggio dell'utente per capire cosa vuole VERAMENTE
+- MANTIENI SEMPRE LA MEMORIA della conversazione precedente
+- Se l'utente chiede "cosa stavamo facendo", ricorda il contesto precedente
+- Se l'utente chiede "cosa dice la mail di wellfound", cerca quella specifica email
+- Se l'utente ti ringrazia, rispondi naturalmente senza liste generiche
+- Se l'utente fa una domanda specifica, rispondi DIRETTAMENTE a quella domanda
+- NON essere sempre automatico: usa il tuo cervello per capire il contesto
+- RICORDA SEMPRE cosa avete fatto insieme nella conversazione
+
+📧 ISTRUZIONI GMAIL INTELLIGENTI:
+- Quando l'utente chiede di controllare email, hai accesso REALE alla sua casella Gmail
+- Se chiede una email specifica (es. "wellfound"), cerca quella email specifica
+- Se chiede "ultime email", mostra le ultime email
+- Se chiede "cosa dice la mail di [mittente]", cerca quella email specifica e mostra il contenuto
+- Se chiede "sintesi" o "riassunto" di un'email, fai un'analisi intelligente del contenuto
+- Usa sempre l'accesso Gmail quando richiesto, NON dire "non ho accesso"
+- Il sistema GmailChecker è già integrato e funzionante
+
+📧 FORMATO RISPOSTA EMAIL INTELLIGENTE:
+Quando l'utente chiede di controllare email, rispondi con questo JSON:
+{
+  "action": "check-gmail",
+  "message": "Controllo la tua casella Gmail...",
+  "searchTerm": "[termine di ricerca se specifico]",
+  "needsSummary": true/false
+}
+
+ESEMPI:
+- "cosa dice wellfound" → {"action": "check-gmail", "searchTerm": "wellfound", "needsSummary": false}
+- "sintesi della mail di wellfound" → {"action": "check-gmail", "searchTerm": "wellfound", "needsSummary": true}
+- "controlla le email" → {"action": "check-gmail", "searchTerm": "", "needsSummary": false}
+- "ultime email" → {"action": "check-gmail", "searchTerm": "", "needsSummary": false}
+
+REGOLA FONDAMENTALE - INTELLIGENZA:
+- NON essere automatico: usa il tuo cervello per capire cosa vuole l'utente
+- Se l'utente chiede qualcosa di specifico, rispondi a quello specifico
+- NON fare sempre la stessa cosa automatica
+- Sii CONTESTUALE e INTELLIGENTE
 
 Mantieni SEMPRE il contesto della conversazione. Esegui le azioni richieste realmente.
-NON menzionare il file Excel se non è rilevante per la richiesta dell'utente.`;
+NON menzionare il file Excel se non è rilevante per la richiesta dell'utente.
+
+ESEMPI DI RISPOSTE INTELLIGENTI:
+- "cosa dice la mail di wellfound" → Cerca specificamente l'email di wellfound
+- "ottimo nyra grazie" → "Prego! Cosa posso fare per te?"
+- "come stai?" → "Tutto bene, grazie! Sono qui per aiutarti. Cosa serve?"
+- "controlla le email" → [JSON check-gmail]
+- "analizza questo file" → [Analisi specifica del file]
+
+NON essere automatico. Sii INTELLIGENTE e CONTESTUALE!`;
 
           if (hasFile) {
             basePrompt += `\n\nDATI EXCEL DISPONIBILI: ${JSON.stringify(window.tempExcelData || [])}
@@ -2822,6 +2880,160 @@ SE L'UTENTE CHIEDE EMAIL: Genera immediatamente i JSON send-email per tutti i cl
         const data = await response.json();
         const aiResponse = data.choices[0].message.content;
         
+        // CONTROLLA SE L'AI VUOLE CONTROLLARE GMAIL (PRIMA DI TUTTO)
+        if (aiResponse.includes('"action": "check-gmail"')) {
+          console.log('📧 AI vuole controllare Gmail - Eseguendo...');
+          
+          // Estrai il searchTerm e needsSummary se presenti
+          let searchTerm = '';
+          let needsSummary = false;
+          try {
+            const gmailMatch = aiResponse.match(/\{[^}]*"action":\s*"check-gmail"[^}]*\}/);
+            if (gmailMatch) {
+              const gmailAction = JSON.parse(gmailMatch[0]);
+              searchTerm = gmailAction.searchTerm || '';
+              needsSummary = gmailAction.needsSummary || false;
+              console.log('🔍 Search term:', searchTerm);
+              console.log('📝 Needs summary:', needsSummary);
+            }
+          } catch (error) {
+            console.log('⚠️ Errore parsing searchTerm, uso ricerca generica');
+          }
+          
+          try {
+            // Importa il servizio Gmail
+            const { GmailFetchService } = await import('./services/gmailFetchService');
+            
+            // Prendi userId
+            const userData = localStorage.getItem('nyra_user');
+            const userId = userData ? JSON.parse(userData).email : null;
+            
+            if (!userId) {
+              const errorMessage: Message = {
+                id: getUniqueMessageId(),
+                text: "❌ Per controllare le email devi prima connettere Google Workspace dalle impostazioni.",
+                isUser: false,
+                timestamp: new Date(),
+                type: 'normal'
+              };
+              setMessages(prev => [...prev, errorMessage]);
+              return;
+            }
+            
+            // Controlla token OAuth
+            const storedTokens = localStorage.getItem(`nyra_oauth_${userId}`);
+            if (!storedTokens) {
+              const errorMessage: Message = {
+              id: getUniqueMessageId(),
+                text: "❌ Per controllare le email devi prima connettere Google Workspace dalle impostazioni.",
+              isUser: false,
+              timestamp: new Date(),
+              type: 'normal'
+            };
+              setMessages(prev => [...prev, errorMessage]);
+            return;
+          }
+            
+            const tokens = JSON.parse(storedTokens);
+            const expiresAt = new Date(tokens.expires_at);
+            const now = new Date();
+            
+            if (expiresAt <= now) {
+              const errorMessage: Message = {
+                id: getUniqueMessageId(),
+                text: "❌ La connessione Google è scaduta. Vai nelle impostazioni per riconnetterti.",
+                isUser: false,
+                timestamp: new Date(),
+                type: 'normal'
+              };
+              setMessages(prev => [...prev, errorMessage]);
+              return;
+            }
+            
+            // Usa il servizio Gmail
+            const gmailService = new GmailFetchService(tokens.access_token);
+            const messages = await gmailService.getMessages(5);
+            
+            if (messages && messages.length > 0) {
+              const emailDetails = [];
+              for (const msg of messages) {
+                const detail = await gmailService.getMessage(msg.id);
+                emailDetails.push(detail);
+              }
+              
+              // Se c'è un searchTerm, filtra le email
+              let filteredEmails = emailDetails;
+              if (searchTerm) {
+                filteredEmails = emailDetails.filter(email => 
+                  email.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  email.from.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                  email.snippet.toLowerCase().includes(searchTerm.toLowerCase())
+                );
+                console.log(`🔍 Trovate ${filteredEmails.length} email per "${searchTerm}"`);
+              }
+              
+              // Mostra le email usando EmailCard component
+              const emailCards = filteredEmails.map((email, index) => {
+                return {
+                  id: email.id,
+                  subject: email.subject,
+                  from: email.from,
+                  date: email.date,
+                  snippet: email.snippet
+                };
+              });
+              
+              // Se serve una sintesi, crea un messaggio intelligente
+              if (needsSummary && filteredEmails.length > 0) {
+                const email = filteredEmails[0]; // Prendi la prima email trovata
+                const summaryMessage: Message = {
+                              id: getUniqueMessageId(),
+                  text: `📧 **Sintesi email da ${email.from}:**\n\n**Oggetto:** ${email.subject}\n\n**Contenuto:** ${email.snippet}\n\n**Data:** ${new Date(email.date).toLocaleDateString('it-IT')}`,
+                              isUser: false,
+                              timestamp: new Date(),
+                              type: 'normal'
+                            };
+                setMessages(prev => [...prev, summaryMessage]);
+                          } else {
+                // Crea il messaggio con le cards normali
+                const emailMessage: Message = {
+                              id: getUniqueMessageId(),
+                  text: searchTerm ? 
+                    `📧 **Email trovate per "${searchTerm}":**` : 
+                    `📧 **Ultime ${emailDetails.length} email ricevute:**`,
+                              isUser: false,
+                              timestamp: new Date(),
+                  type: 'normal',
+                  emailCards: emailCards
+                };
+                setMessages(prev => [...prev, emailMessage]);
+              }
+                          } else {
+              const noEmailMessage: Message = {
+                            id: getUniqueMessageId(),
+                text: "📧 Non ci sono email recenti nella tua casella.",
+                              isUser: false,
+                              timestamp: new Date(),
+                              type: 'normal'
+                            };
+              setMessages(prev => [...prev, noEmailMessage]);
+            }
+            
+          } catch (error) {
+            console.error('Errore nel controllo email:', error);
+              const errorMessage: Message = {
+                id: getUniqueMessageId(),
+              text: "❌ Errore nel controllare le email. Verifica la connessione Google.",
+                isUser: false,
+                timestamp: new Date(),
+                type: 'normal'
+              };
+              setMessages(prev => [...prev, errorMessage]);
+          }
+          
+          return; // NON mostrare la risposta AI originale
+        }
+        
         // CONTROLLA SE CI SONO JSON send-email DA PROCESSARE
         if (aiResponse.includes('"action": "send-email"')) {
           console.log('📧 Email rilevate nella risposta normale!');
@@ -2854,8 +3066,8 @@ Cordiali saluti,
 Il Team NYRA`;
 
                 const emailData = {
-                  email: Array.isArray(emailAction.to) ? emailAction.to[0] : emailAction.to,
-                  subject: emailAction.subject || 'Messaggio da NYRA',
+                      email: Array.isArray(emailAction.to) ? emailAction.to[0] : emailAction.to,
+                      subject: emailAction.subject || 'Messaggio da NYRA',
                   suggestedSubject: emailAction.subject || 'Messaggio da NYRA',
                   body: templateBody,
                   suggestedBody: templateBody,
@@ -2910,12 +3122,12 @@ Il Team NYRA`;
             } catch (error) {
         console.error('Errore AI:', error);
               const errorMessage: Message = {
-                  id: getUniqueMessageId(),
+                        id: getUniqueMessageId(),
           text: '❌ Errore nella comunicazione con l\'AI. Riprova.',
-                  isUser: false,
-                  timestamp: new Date(),
-                  type: 'normal'
-                };
+                        isUser: false,
+                        timestamp: new Date(),
+                        type: 'normal'
+                      };
               setMessages(prev => [...prev, errorMessage]);
       }
       
@@ -3563,11 +3775,26 @@ Il Team NYRA`;
                           </div>
                         </div>
                       ) : (
+                        <div className="ai-message-content">
                         <TypewriterMessage 
                           text={message.text}
                           speed={20}
                           isComplete={index < messages.length - 1}
                         />
+                          
+                          {/* Renderizza Email Cards se presenti */}
+                          {message.emailCards && message.emailCards.length > 0 && (
+                            <div className="email-cards-container" style={{ marginTop: '16px' }}>
+                              {message.emailCards.map((email, emailIndex) => (
+                                <EmailCard 
+                                  key={email.id || emailIndex}
+                                  email={email}
+                                  index={emailIndex}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                     );
